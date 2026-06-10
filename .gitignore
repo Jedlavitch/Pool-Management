@@ -2,6 +2,12 @@
 data.json
 photos/
 
+# Legacy standalone page (superseded by Maralavitchstaff)
+quicklog.html
+
+# Claude Code local settings
+.claude/settings.local.json
+
 # macOS
 .DS_Store
 
