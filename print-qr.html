@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pool Manager — Print QR Codes</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root { --blue:#023e8a; --blue-light:#0077b6; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#e5e7eb; padding:30px 20px; }
+
+  .screen-only { text-align:center; margin-bottom:28px; }
+  .screen-only h1 { font-size:1.4rem; color:var(--blue); margin-bottom:8px; }
+  .screen-only p { color:#6b7280; font-size:.9rem; margin-bottom:16px; }
+  .btn { display:inline-block; padding:10px 24px; background:var(--blue); color:white; border:none; border-radius:8px; font-size:.95rem; font-weight:600; cursor:pointer; }
+  .btn:hover { opacity:.85; }
+
+  .sheet-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px,1fr)); gap:24px; max-width:900px; margin:0 auto; }
+
+  .sheet {
+    background:white;
+    border-radius:12px;
+    padding:28px 24px 24px;
+    box-shadow:0 4px 16px rgba(0,0,0,.12);
+    display:flex; flex-direction:column; align-items:center;
+    text-align:center;
+    page-break-inside:avoid;
+  }
+  .pool-name { font-size:.75rem; font-weight:700; color:#9ca3af; text-transform:uppercase; letter-spacing:.1em; margin-bottom:6px; }
+  .sheet h2 { font-size:1.35rem; font-weight:800; color:var(--blue); margin-bottom:4px; }
+  .sheet .subtitle { font-size:.85rem; color:#4b5563; margin-bottom:18px; }
+  .qr-wrap { background:#f9fafb; border:3px solid #e5e7eb; border-radius:10px; padding:16px; margin-bottom:18px; }
+  .qr-wrap canvas, .qr-wrap img { display:block; }
+  .steps { text-align:left; width:100%; margin-bottom:16px; }
+  .steps li { font-size:.82rem; color:#374151; padding:5px 0 5px 20px; position:relative; line-height:1.4; }
+  .steps li::before { content:attr(data-n); position:absolute; left:0; font-weight:800; color:var(--blue-light); }
+  .divider { width:100%; border:none; border-top:1px dashed #d1d5db; margin:12px 0; }
+  .url-box { background:#eff6ff; border:1px solid #bfdbfe; border-radius:6px; padding:8px 12px; font-size:.72rem; font-family:monospace; color:var(--blue); word-break:break-all; width:100%; }
+  .warning { font-size:.72rem; color:#6b7280; margin-top:10px; }
+
+  /* full-page variant */
+  .sheet.large { padding:40px 36px 32px; }
+  .sheet.large h2 { font-size:1.7rem; }
+  .sheet.large .subtitle { font-size:1rem; margin-bottom:24px; }
+  .sheet.large .steps li { font-size:.95rem; padding:7px 0 7px 24px; }
+
+  @media print {
+    body { background:white; padding:0; }
+    .screen-only { display:none !important; }
+    .sheet-grid { display:block; max-width:100%; gap:0; }
+    .sheet { box-shadow:none; border:2px solid #d1d5db; border-radius:8px; margin:20px; page-break-inside:avoid; }
+    .sheet.large { margin:0; border:none; border-radius:0; min-height:100vh; justify-content:center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="screen-only">
+  <h1>🖨️ Print QR Codes</h1>
+  <p>Print these and post them at the pool, chemical station, or guard room.</p>
+  <button class="btn" onclick="window.print()">Print / Save as PDF</button>
+</div>
+
+<div class="sheet-grid" id="grid">
+  <p style="text-align:center;color:#6b7280;padding:40px">Loading QR codes…</p>
+</div>
+
+<script>
+async function buildSheets() {
+  let baseUrl = 'http://localhost:8765';
+  try {
+    const d = await (await fetch('/api/ip')).json();
+    baseUrl = d.base_url || `http://${d.host}:${d.port}`;
+  } catch(e) {}
+
+  const staffUrl = `${baseUrl}/maralavitchstaff`;
+  const mgmtUrl  = `${baseUrl}/maralavitchmanagement`;
+
+  const sheets = [
+    {
+      id: 'qr-staff-large',
+      size: 220,
+      url: staffUrl,
+      large: true,
+      title: 'Maralavitchstaff',
+      subtitle: 'Schedule · Clock In/Out · Chemical Log',
+      steps: [
+        'Open your phone camera',
+        'Point at this QR code',
+        'Tap the link that appears',
+        'Select your name to get started',
+      ]
+    },
+    {
+      id: 'qr-staff-small',
+      size: 160,
+      url: staffUrl,
+      large: false,
+      title: 'Maralavitchstaff',
+      subtitle: 'Schedule, clock in/out & chemicals',
+      steps: [
+        'Open camera, scan code',
+        'Select your name',
+        'Clock in/out or log chemicals',
+      ]
+    },
+    {
+      id: 'qr-mgmt',
+      size: 160,
+      url: mgmtUrl,
+      large: false,
+      title: 'Maralavitchmanagement',
+      subtitle: 'Full manager dashboard',
+      steps: [
+        'Open camera, scan code',
+        'Manager access only',
+        'Schedule, reports & time clock',
+      ]
+    },
+  ];
+
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  for (const s of sheets) {
+    const div = document.createElement('div');
+    div.className = 'sheet' + (s.large ? ' large' : '');
+    div.innerHTML = `
+      <div class="pool-name">🏊 Pool Manager</div>
+      <h2>${s.title}</h2>
+      <p class="subtitle">${s.subtitle}</p>
+      <div class="qr-wrap" id="${s.id}"></div>
+      <ol class="steps">
+        ${s.steps.map((t,i)=>`<li data-n="${i+1}">${t}</li>`).join('')}
+      </ol>
+      <hr class="divider"/>
+      <div class="url-box">${s.url}</div>
+      <p class="warning">📶 Phone must be on the same WiFi network</p>
+    `;
+    grid.appendChild(div);
+
+    new QRCode(document.getElementById(s.id), {
+      text: s.url,
+      width: s.size,
+      height: s.size,
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  }
+}
+
+buildSheets();
+</script>
+</body>
+</html>

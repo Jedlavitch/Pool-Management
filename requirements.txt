@@ -1,0 +1,2 @@
+# Pure Python stdlib — no third-party packages required.
+# This file exists so Railway/Nixpacks detects this as a Python project.

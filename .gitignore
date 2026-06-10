@@ -1,0 +1,11 @@
+# Don't commit local data or photos — these live on the cloud volume
+data.json
+photos/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
