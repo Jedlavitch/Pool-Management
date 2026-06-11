@@ -407,6 +407,14 @@ select.form-inp{cursor:pointer;}
 .res-sub{font-size:.86rem;color:var(--muted);margin-bottom:16px;line-height:1.5;}
 .flag-list{text-align:left;background:var(--yellow-lt);border:1px solid var(--yellow);border-radius:var(--r-sm);padding:10px 14px;margin-bottom:12px;}
 .flag-list li{font-size:.81rem;color:var(--yellow);padding:3px 0;}
+
+/* ── Clock-in flagged-conditions banner (non-blocking) ─────────────────── */
+.clockin-flags{background:var(--yellow-lt);border:1px solid var(--yellow);border-radius:var(--r);padding:13px 15px;margin-bottom:12px;}
+.clockin-flags .cf-head{font-weight:800;color:var(--yellow);font-size:.9rem;margin-bottom:2px;}
+.clockin-flags .cf-sub{font-size:.77rem;color:var(--muted);margin-bottom:8px;line-height:1.45;}
+.clockin-flags ul{margin:0 0 10px;padding-left:18px;}
+.clockin-flags li{font-size:.82rem;color:var(--text);padding:2px 0;}
+.clockin-flags button{background:var(--yellow);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:.8rem;font-weight:700;cursor:pointer;}
 .btn-home{
   width:100%;padding:15px;background:var(--blue-dk);color:#fff;
   border:none;border-radius:var(--r-sm);font-size:.92rem;font-weight:700;cursor:pointer;margin-top:8px;
@@ -557,6 +565,7 @@ select.form-inp{cursor:pointer;}
   <p class="greeting" id="home-greeting"></p>
   <p class="sub-greeting" id="home-date"></p>
   <div id="home-clock"></div>
+  <div id="home-flag-banner"></div>
   <div id="home-today"></div>
   <button class="logout-link" onclick="switchPool()" style="margin-top:18px;color:var(--blue)">🏊 Switch pool</button>
   <button class="logout-link" onclick="logout()" style="margin-top:8px">Switch worker ↩</button>
@@ -719,6 +728,7 @@ let chemType = 'hourly';
 let selectedDay = null;  // for week strip
 let pendingConfirmShift = null; // shift being confirmed
 let activePoolId = null, activePoolName = '';
+let postClockInFlags = null; // start-of-shift issues to show once on home
 const urlPool = new URLSearchParams(location.search).get('pool'); // QR deep-link
 const CI_TOTAL = 3, CO_TOTAL = 3;
 
@@ -986,6 +996,23 @@ async function loadHome() {
         <div class="clock-since">Tap to start your shift</div>
         <button class="big-btn btn-in" onclick="startClockIn()" style="margin-top:12px">Clock In</button>
       </div>`;
+  }
+
+  // Start-of-shift issues banner (shown once after clocking in with imperfect conditions)
+  const flagBanner = document.getElementById('home-flag-banner');
+  if (flagBanner) {
+    if (postClockInFlags && postClockInFlags.length) {
+      flagBanner.innerHTML = `
+        <div class="clockin-flags">
+          <div class="cf-head">⚠️ Reported to management</div>
+          <div class="cf-sub">You're clocked in. These start-of-shift issues were sent to your manager:</div>
+          <ul>${postClockInFlags.map(f => `<li>${f}</li>`).join('')}</ul>
+          <button onclick="document.getElementById('home-flag-banner').innerHTML=''">Got it</button>
+        </div>`;
+      postClockInFlags = null;
+    } else {
+      flagBanner.innerHTML = '';
+    }
   }
 
   // Today's shift summary (this pool only)
@@ -1376,11 +1403,10 @@ async function ciConfirm(){
   const res=await post('/api/punch/in',{empId,empName,answers:ciAnswers,flags,poolId:Number(activePoolId)});
   if(res.error){alert(res.error);return;}
   isClockedIn = true;
-  // After the start-of-shift questionnaire, go straight to the home screen.
-  // If anything was flagged, surface it so the worker knows it went to management.
-  if (flags.length) {
-    alert('✅ Clocked in!\n\n⚠️ Issues flagged for management:\n• ' + flags.join('\n• '));
-  }
+  // Always clock in and go straight home — even if conditions weren't perfect.
+  // Any flagged issues are recorded for management and shown as a dismissible
+  // note on the home screen (no blocking popup).
+  postClockInFlags = flags.length ? flags : null;
   await loadHome();
 }
 
