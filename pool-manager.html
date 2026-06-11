@@ -70,7 +70,14 @@
 
 <header>
   <h1>🏊 Maralavitchmanagement</h1>
-  <span id="header-clock"></span>
+  <div style="display:flex;align-items:center;gap:14px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:.72rem;opacity:.7">POOL</span>
+      <select id="pool-switcher" onchange="switchPool(this.value)"
+        style="padding:6px 10px;border-radius:6px;border:none;font-size:.85rem;font-weight:700;background:rgba(255,255,255,.18);color:#fff;cursor:pointer;max-width:200px"></select>
+    </div>
+    <span id="header-clock" style="white-space:nowrap"></span>
+  </div>
 </header>
 
 <nav>
@@ -80,6 +87,7 @@
   <button onclick="showPage('employees',this)">Employees</button>
   <button onclick="showPage('board',this)">Board</button>
   <button onclick="showPage('reports',this)">Reports</button>
+  <button onclick="showPage('pools',this)">🏊 Pools</button>
 </nav>
 
 <!-- CHEMICALS -->
@@ -281,7 +289,7 @@
   <div class="card">
     <h2>Staff</h2>
     <table>
-      <thead><tr><th>Name</th><th>Role Badge</th><th>Phone</th><th>Password</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Role Badge</th><th>Phone</th><th>Password</th><th>Pools</th><th>Actions</th></tr></thead>
       <tbody id="emp-table"></tbody>
     </table>
   </div>
@@ -306,6 +314,28 @@
 
 <!-- BOARD -->
 <div class="page" id="page-board">
+  <div class="card" style="border:2px solid var(--blue-light)">
+    <h2>📣 Send Notification to Staff</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">
+      Pushes an instant alert to staff phones and their in-app bell. Goes to staff at
+      <strong id="notif-pool-name">this pool</strong>.</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Send To</label>
+        <select id="notif-target"></select>
+      </div>
+      <div class="form-group" style="flex:2">
+        <label>Title</label>
+        <input type="text" id="notif-title" placeholder="📢 Message from Management" />
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>Message</label>
+      <textarea id="notif-msg" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:.9rem;font-family:inherit;resize:vertical" placeholder="e.g. Staff meeting at 3pm today by the lifeguard stand."></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="sendNotification()">📤 Send Notification</button>
+    <div id="notif-send-result" style="font-size:.85rem;margin-top:8px"></div>
+  </div>
   <div class="card">
     <h2>Pool Status</h2>
     <div class="form-row" style="margin-bottom:0">
@@ -405,6 +435,47 @@
   </div>
 </div>
 
+<!-- POOLS -->
+<div class="page" id="page-pools">
+  <div class="card">
+    <h2>Add New Pool</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">
+      Each pool has its own staff, schedule, chemical log, time clock, and board.
+      Use the selector in the header to switch between pools.</p>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>Pool Name</label>
+        <input type="text" id="pool-name" placeholder="e.g. Westside Community Pool" />
+      </div>
+      <div class="form-group" style="flex:2">
+        <label>Address / Location</label>
+        <input type="text" id="pool-address" placeholder="Optional" />
+      </div>
+      <div class="form-group" style="flex:0">
+        <label>&nbsp;</label>
+        <button class="btn btn-primary" onclick="addPool()">Add Pool</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>All Pools</h2>
+    <div id="pools-list"></div>
+  </div>
+</div>
+
+<!-- Employee Pools Modal -->
+<div id="emp-pools-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:24px;width:90%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <h3 style="margin-bottom:6px;color:var(--blue-dark)" id="emp-pools-title">Assign Pools</h3>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:14px">Select which pools this employee is staffed at.</p>
+    <div id="emp-pools-checks" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;max-height:240px;overflow-y:auto"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveEmpPools()">Save</button>
+      <button class="btn" style="flex:1;background:#f3f4f6" onclick="closeEmpPools()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── API ────────────────────────────────────────────────────────────────────
 const api = {
@@ -413,16 +484,55 @@ const api = {
 };
 
 // ── State ──────────────────────────────────────────────────────────────────
-let DB = { employees:[], chemicals:[], shifts:[], punches:[] };
+let DB = { employees:[], chemicals:[], shifts:[], punches:[], pools:[] };
 let currentWeekOffset = 0;
+let activePoolId = null;
 
 async function refresh() {
   DB = await api.get();
+  // Ensure the active pool is valid; fall back to saved or first pool
+  const pools = DB.pools || [];
+  if (!activePoolId || !pools.some(p => Number(p.id) === Number(activePoolId))) {
+    const saved = Number(localStorage.getItem('pm_active_pool'));
+    activePoolId = pools.some(p => Number(p.id) === saved) ? saved : (pools[0]?.id ?? null);
+  }
+  renderPoolSwitcher();
   refreshEmpSelects();
 }
 
+// ── Pool scoping helpers ────────────────────────────────────────────────────
+function activePool() {
+  return (DB.pools || []).find(p => Number(p.id) === Number(activePoolId)) || (DB.pools || [])[0] || null;
+}
+function inPool(item) { return Number(item.poolId) === Number(activePoolId); }
+function poolEmployees() {
+  return DB.employees.filter(e => (e.poolIds || []).map(Number).includes(Number(activePoolId)));
+}
+function renderPoolSwitcher() {
+  const sel = document.getElementById('pool-switcher');
+  if (!sel) return;
+  sel.innerHTML = (DB.pools || []).map(p =>
+    `<option value="${p.id}" ${Number(p.id) === Number(activePoolId) ? 'selected' : ''}>${p.name}</option>`
+  ).join('');
+}
+function rerenderActive() {
+  const active = document.querySelector('.page.active');
+  const name = active ? active.id.replace('page-', '') : 'chemicals';
+  ({ chemicals:renderChemicals, schedule:renderSchedule, timeclock:renderTimeclock,
+     employees:renderEmployees, board:renderBoard, reports:renderReports, pools:renderPools }[name] || (()=>{}))();
+}
+function switchPool(id) {
+  activePoolId = Number(id);
+  localStorage.setItem('pm_active_pool', String(activePoolId));
+  refreshEmpSelects();
+  buildQR();
+  rerenderActive();
+}
+
 // ── Utilities ──────────────────────────────────────────────────────────────
-const today = () => new Date().toISOString().slice(0,10);
+// Local-date formatter — must match the server's local date (NOT UTC)
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const today = () => ymd(new Date());
 const nowTime = () => new Date().toTimeString().slice(0,5);
 function fmt(dateStr, timeStr) {
   if (!dateStr) return '';
@@ -457,6 +567,7 @@ function showPage(name, btn) {
   if (name==='employees') renderEmployees();
   if (name==='reports') renderReports();
   if (name==='board') renderBoard();
+  if (name==='pools') renderPools();
 }
 
 // ── QR Code ────────────────────────────────────────────────────────────────
@@ -464,7 +575,8 @@ async function buildQR() {
   try {
     const d = await (await fetch('/api/ip')).json();
     const base = d.base_url || `http://${d.host}:${d.port}`;
-    const url = `${base}/maralavitchstaff`;
+    // Deep-link to the active pool so a scan lands staff on the right pool
+    const url = activePoolId ? `${base}/maralavitchstaff?pool=${activePoolId}` : `${base}/maralavitchstaff`;
     document.getElementById('qr-url').textContent = url;
     const el = document.getElementById('qrcode');
     el.innerHTML = '';
@@ -472,6 +584,82 @@ async function buildQR() {
   } catch(e) {
     document.getElementById('qr-url').textContent = 'Start the server to generate QR code.';
   }
+}
+
+// ── Pools ───────────────────────────────────────────────────────────────────
+async function addPool() {
+  const name = document.getElementById('pool-name').value.trim();
+  if (!name) return alert('Enter a pool name.');
+  const res = await api.post('/api/pool', { name, address: document.getElementById('pool-address').value.trim() });
+  document.getElementById('pool-name').value = '';
+  document.getElementById('pool-address').value = '';
+  // Switch to the newly created pool
+  if (res.pool) { activePoolId = Number(res.pool.id); localStorage.setItem('pm_active_pool', String(activePoolId)); }
+  await refresh();
+  renderPools();
+}
+async function renamePool(id) {
+  const pool = DB.pools.find(p => Number(p.id) === Number(id));
+  const name = prompt('Pool name:', pool?.name || '');
+  if (name === null) return;
+  const address = prompt('Address / location (optional):', pool?.address || '');
+  await api.post('/api/pool/update', { id, name: name.trim() || pool.name, address: (address || '').trim() });
+  await refresh();
+  renderPools();
+}
+async function deletePool(id) {
+  if ((DB.pools || []).length <= 1) return alert('You must keep at least one pool.');
+  const pool = DB.pools.find(p => Number(p.id) === Number(id));
+  if (!confirm(`Delete "${pool?.name}"?\n\nThis permanently removes that pool's schedule, chemical log, time-clock records, announcements, and resources. Staff assigned only to this pool will be unassigned. This cannot be undone.`)) return;
+  const res = await api.post('/api/pool/delete', { id });
+  if (!res.ok) return alert(res.error || 'Could not delete pool.');
+  if (Number(activePoolId) === Number(id)) activePoolId = null; // refresh() will pick a new one
+  await refresh();
+  renderPools();
+}
+async function setPoolStatusFor(id, status) {
+  await api.post('/api/pool_status', { poolId: Number(id), status });
+  await refresh();
+  renderPools();
+}
+function renderPools() {
+  const el = document.getElementById('pools-list');
+  if (!el) return;
+  const pools = DB.pools || [];
+  if (!pools.length) { el.innerHTML = '<p class="empty">No pools yet. Add one above.</p>'; return; }
+  const statusCfg = { open:{t:'🟢 Open',c:'var(--green)'}, limited:{t:'🟡 Limited',c:'var(--yellow)'}, closed:{t:'🔴 Closed',c:'var(--red)'} };
+  el.innerHTML = pools.map(p => {
+    const staff = DB.employees.filter(e => (e.poolIds || []).map(Number).includes(Number(p.id)));
+    const shifts = DB.shifts.filter(s => Number(s.poolId) === Number(p.id));
+    const isActive = Number(p.id) === Number(activePoolId);
+    const sc = statusCfg[p.status] || statusCfg.open;
+    return `<div style="padding:14px;border:2px solid ${isActive ? 'var(--blue)' : 'var(--border)'};border-radius:10px;margin-bottom:12px;background:${isActive ? '#f0f9ff' : '#fff'}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:180px">
+          <div style="font-weight:700;font-size:1rem;color:var(--blue-dark)">
+            ${p.name} ${isActive ? '<span class="badge" style="background:var(--blue);color:#fff;font-size:.65rem">ACTIVE</span>' : ''}
+          </div>
+          ${p.address ? `<div style="font-size:.8rem;color:var(--muted);margin-top:2px">📍 ${p.address}</div>` : ''}
+          <div style="font-size:.78rem;color:var(--muted);margin-top:6px">
+            👥 ${staff.length} staff · 📅 ${shifts.length} shifts · <span style="color:${sc.c};font-weight:600">${sc.t}</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          ${!isActive ? `<button class="btn btn-sm btn-primary" onclick="switchPool(${p.id})">Switch to this pool</button>` : ''}
+          <div style="display:flex;gap:5px">
+            <button class="btn btn-sm" style="background:#f1f5f9" onclick="renamePool(${p.id})">✎ Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deletePool(${p.id})">Delete</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:10px">
+        <span style="font-size:.72rem;color:var(--muted);align-self:center">Status:</span>
+        <button class="btn btn-sm" style="background:${p.status==='open'?'var(--green)':'#f1f5f9'};color:${p.status==='open'?'#fff':'#000'}" onclick="setPoolStatusFor(${p.id},'open')">🟢 Open</button>
+        <button class="btn btn-sm" style="background:${p.status==='limited'?'var(--yellow)':'#f1f5f9'};color:${p.status==='limited'?'#fff':'#000'}" onclick="setPoolStatusFor(${p.id},'limited')">🟡 Limited</button>
+        <button class="btn btn-sm" style="background:${p.status==='closed'?'var(--red)':'#f1f5f9'};color:${p.status==='closed'?'#fff':'#000'}" onclick="setPoolStatusFor(${p.id},'closed')">🔴 Closed</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── Employees ─────────────────────────────────────────────────────────────
@@ -483,6 +671,7 @@ async function addEmployee() {
     name,
     role: document.getElementById('emp-role').value,
     phone: document.getElementById('emp-phone').value,
+    poolIds: activePoolId ? [Number(activePoolId)] : [],
     ...(pw ? { password: pw } : {})
   });
   document.getElementById('emp-name').value = '';
@@ -499,8 +688,15 @@ async function deleteEmployee(id) {
 }
 function renderEmployees() {
   const tb = document.getElementById('emp-table');
-  tb.innerHTML = DB.employees.length ? DB.employees.map(e =>
-    `<tr>
+  const emps = poolEmployees();
+  tb.innerHTML = emps.length ? emps.map(e => {
+    const poolNames = (e.poolIds || [])
+      .map(pid => (DB.pools.find(p => Number(p.id) === Number(pid)) || {}).name)
+      .filter(Boolean);
+    const poolChips = poolNames.length
+      ? poolNames.map(n => `<span style="display:inline-block;background:#eff6ff;color:var(--blue);border-radius:10px;padding:1px 7px;margin:1px;font-size:.72rem">${n}</span>`).join(' ')
+      : '<span style="color:var(--muted)">—</span>';
+    return `<tr>
       <td><strong>${e.name}</strong></td>
       <td>
         <span style="font-size:.72rem;padding:2px 8px;border-radius:10px;font-weight:700;background:${rc(e.role).bg};color:${rc(e.role).fg};border:1px solid ${rc(e.role).border}">${e.role}</span>
@@ -509,12 +705,40 @@ function renderEmployees() {
       <td>${e.has_password
         ? '<span style="color:#166534;font-weight:600">🔒 Set</span>'
         : '<span style="color:var(--muted)">🔓 None</span>'}</td>
+      <td>${poolChips}
+        <button class="btn btn-sm" style="background:#f1f5f9;margin-left:2px;padding:3px 7px" onclick="openEmpPools(${e.id},'${e.name.replace(/'/g,"\\'")}')">✎</button></td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm btn-primary" onclick="openPwModal(${e.id},'${e.name.replace(/'/g,"\\'")}')">Set Password</button>
         <button class="btn btn-danger" onclick="deleteEmployee(${e.id})">Remove</button>
       </td>
-    </tr>`
-  ).join('') : `<tr><td colspan="5" class="empty">No employees yet.</td></tr>`;
+    </tr>`;
+  }).join('') : `<tr><td colspan="6" class="empty">No staff assigned to this pool yet. Add one above, or assign existing staff from another pool using the ✎ button.</td></tr>`;
+}
+
+// ── Employee → Pool assignment ──────────────────────────────────────────────
+let _empPoolsId = null;
+function openEmpPools(id, name) {
+  _empPoolsId = id;
+  const emp = DB.employees.find(e => Number(e.id) === Number(id));
+  const assigned = (emp?.poolIds || []).map(Number);
+  document.getElementById('emp-pools-title').textContent = `Assign Pools — ${name}`;
+  document.getElementById('emp-pools-checks').innerHTML = (DB.pools || []).map(p => `
+    <label style="display:flex;align-items:center;gap:9px;font-size:.92rem;cursor:pointer;padding:6px 8px;border:1px solid var(--border);border-radius:8px">
+      <input type="checkbox" value="${p.id}" ${assigned.includes(Number(p.id)) ? 'checked' : ''} style="width:auto;transform:scale(1.2)"/>
+      <span>${p.name}</span>
+    </label>`).join('');
+  document.getElementById('emp-pools-modal').style.display = 'flex';
+}
+function closeEmpPools() {
+  document.getElementById('emp-pools-modal').style.display = 'none';
+  _empPoolsId = null;
+}
+async function saveEmpPools() {
+  const ids = [...document.querySelectorAll('#emp-pools-checks input:checked')].map(c => Number(c.value));
+  await api.post('/api/employee/pools', { empId: _empPoolsId, poolIds: ids });
+  closeEmpPools();
+  await refresh();
+  renderEmployees();
 }
 
 // ── Password Modal ─────────────────────────────────────────────────────────
@@ -539,8 +763,8 @@ async function saveEmpPassword() {
   alert(pw ? '✅ Password saved.' : '🔓 Password removed.');
 }
 function refreshEmpSelects() {
-  const opts = DB.employees.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
-  const empty = '<option value="">— No employees —</option>';
+  const opts = poolEmployees().map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  const empty = '<option value="">— No staff in this pool —</option>';
   ['chem-by','tc-emp','sched-emp'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = opts || empty;
@@ -562,6 +786,7 @@ async function logChemical() {
     cl, ph,
     ccl: cclVal !== '' ? parseFloat(cclVal) : null,
     by: byName,
+    poolId: Number(activePoolId),
     notes: document.getElementById('chem-notes').value,
   });
   document.getElementById('chem-cl').value = '';
@@ -578,7 +803,7 @@ async function deleteChemLog(id) {
 }
 async function renderChemicals() {
   await refresh();
-  const logs = DB.chemicals;
+  const logs = DB.chemicals.filter(inPool);
   const todayLogs = logs.filter(r => r.date === today());
   const lastCl = logs[0]?.cl ?? '—';
   const lastPh = logs[0]?.ph ?? '—';
@@ -620,7 +845,7 @@ function getWeekDates(offset) {
   const day = d.getDay();
   const monday = new Date(d);
   monday.setDate(d.getDate() - day + 1 + offset*7);
-  return Array.from({length:7}, (_,i) => { const dd=new Date(monday); dd.setDate(monday.getDate()+i); return dd.toISOString().slice(0,10); });
+  return Array.from({length:7}, (_,i) => { const dd=new Date(monday); dd.setDate(monday.getDate()+i); return ymd(dd); });
 }
 function changeWeek(dir) { currentWeekOffset = dir===0 ? 0 : currentWeekOffset+dir; renderSchedule(); }
 async function addShift() {
@@ -630,7 +855,7 @@ async function addShift() {
   const end = document.getElementById('sched-end').value;
   if (!empId||!date||!start||!end) return alert('Fill all shift fields.');
   const emp = DB.employees.find(e=>String(e.id)===String(empId));
-  await api.post('/api/shift', { empId, empName:emp?.name||'?', date, start, end, role:document.getElementById('sched-role').value });
+  await api.post('/api/shift', { empId, empName:emp?.name||'?', date, start, end, role:document.getElementById('sched-role').value, poolId:Number(activePoolId) });
   await refresh();
   renderSchedule();
 }
@@ -652,12 +877,13 @@ async function renderSchedule() {
       const isToday = d === todayStr;
       return `<th style="${isToday?'background:#dbeafe;color:var(--blue);':''}min-width:90px">${dayNames[i]}<br><small style="font-weight:400">${new Date(d).getUTCDate()}</small></th>`;
     }).join('')+'</tr>';
-  document.getElementById('sched-body').innerHTML = DB.employees.length ? DB.employees.map(emp => {
+  const emps = poolEmployees();
+  document.getElementById('sched-body').innerHTML = emps.length ? emps.map(emp => {
     const empC = rc(emp.role);
     const cells = dates.map(d => {
-      const dayShifts = DB.shifts.filter(s => String(s.empId)===String(emp.id) && s.date===d);
+      const dayShifts = DB.shifts.filter(s => String(s.empId)===String(emp.id) && s.date===d && inPool(s));
       const dayOffReqs = (DB.shift_requests||[]).filter(r =>
-        String(r.empId)===String(emp.id) && r.date===d && r.type==='day_off' && r.status!=='denied'
+        String(r.empId)===String(emp.id) && r.date===d && r.type==='day_off' && r.status!=='denied' && inPool(r)
       );
       const isToday = d === todayStr;
       let content = '';
@@ -688,12 +914,12 @@ async function renderSchedule() {
       </td>
       ${cells.join('')}
     </tr>`;
-  }).join('') : `<tr><td colspan="8" class="empty">Add employees first.</td></tr>`;
+  }).join('') : `<tr><td colspan="8" class="empty">No staff assigned to this pool. Add staff on the Employees tab.</td></tr>`;
 }
 
 // ── Shift Request Management ───────────────────────────────────────────────
 function renderRequests() {
-  const reqs = DB.shift_requests || [];
+  const reqs = (DB.shift_requests || []).filter(inPool);
   const pending = reqs.filter(r => r.status==='pending');
   const badge = document.getElementById('req-badge');
   if (badge) badge.innerHTML = pending.length
@@ -741,7 +967,8 @@ async function approveRequest(id) {
   if (req && req.type==='shift') {
     await api.post('/api/shift', {
       empId:req.empId, empName:req.empName,
-      date:req.date, start:req.start, end:req.end, role:req.role
+      date:req.date, start:req.start, end:req.end, role:req.role,
+      poolId: req.poolId != null ? req.poolId : Number(activePoolId)
     });
   }
   await refresh();
@@ -764,7 +991,7 @@ async function clockAction() {
   const empId = document.getElementById('tc-emp').value;
   if (!empId) return alert('Select an employee.');
   const emp = DB.employees.find(e=>String(e.id)===String(empId));
-  const res = await api.post('/api/punch', { empId, empName:emp?.name||'?' });
+  const res = await api.post('/api/punch', { empId, empName:emp?.name||'?', poolId:Number(activePoolId) });
   document.getElementById('tc-status').innerHTML =
     `<span style="color:${res.action==='out'?'var(--red)':'var(--green)'}">
       ${emp?.name} clocked ${res.action==='in'?'IN':'OUT'} at ${fmtTime(res.punch[res.action])}
@@ -774,7 +1001,7 @@ async function clockAction() {
 }
 async function renderTimeclock() {
   await refresh();
-  const todayP = DB.punches.filter(p=>p.date===today());
+  const todayP = DB.punches.filter(p=>p.date===today() && inPool(p));
 
   // Punches table
   const punchHtml = todayP.length ? `
@@ -823,14 +1050,23 @@ async function renderTimeclock() {
 // ── Board ──────────────────────────────────────────────────────────────────
 async function renderBoard() {
   await refresh();
-  const status = DB.pool_status || 'open';
+  const status = (activePool() || {}).status || 'open';
   ['open','limited','closed'].forEach(s => {
     const btn = document.getElementById('bstatus-'+s);
     if (btn) btn.style.background = s===status ? 'var(--blue)' : '';
     if (btn) btn.style.color = s===status ? 'white' : '';
   });
+  // Notification recipient picker (scoped to this pool's staff)
+  const poolNameEl = document.getElementById('notif-pool-name');
+  if (poolNameEl) poolNameEl.textContent = (activePool() || {}).name || 'this pool';
+  const tgt = document.getElementById('notif-target');
+  if (tgt) {
+    const staff = poolEmployees();
+    tgt.innerHTML = `<option value="all">👥 All staff (${staff.length})</option>` +
+      staff.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  }
   const typeIcons = { procedure:'📄', contact:'📞', link:'🔗', info:'ℹ️', schedule:'📅' };
-  const anns = DB.announcements || [];
+  const anns = (DB.announcements || []).filter(inPool);
   document.getElementById('mgmt-announcements').innerHTML = anns.length ? anns.map(a => `
     <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px">
       <div style="flex:1">
@@ -840,7 +1076,7 @@ async function renderBoard() {
       </div>
       <button class="btn btn-danger" onclick="deleteAnnouncement(${a.id})">✕</button>
     </div>`).join('') : '<p class="empty">No announcements posted.</p>';
-  const res = DB.resources || [];
+  const res = (DB.resources || []).filter(inPool);
   document.getElementById('mgmt-resources').innerHTML = res.length ? res.map(r => `
     <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
       <span style="font-size:1.2rem">${typeIcons[r.type]||'📌'}</span>
@@ -853,15 +1089,35 @@ async function renderBoard() {
     </div>`).join('') : '<p class="empty">No resources added.</p>';
 }
 async function setPoolStatus(s) {
-  await api.post('/api/pool_status', { status: s });
+  await api.post('/api/pool_status', { poolId: Number(activePoolId), status: s });
   await refresh();
   renderBoard();
+}
+async function sendNotification() {
+  const target = document.getElementById('notif-target').value || 'all';
+  const title = document.getElementById('notif-title').value.trim();
+  const message = document.getElementById('notif-msg').value.trim();
+  const resEl = document.getElementById('notif-send-result');
+  if (!message) { resEl.style.color = 'var(--red)'; resEl.textContent = 'Enter a message to send.'; return; }
+  const res = await api.post('/api/notification/send', {
+    poolId: Number(activePoolId), target, title, message
+  });
+  if (res.ok) {
+    document.getElementById('notif-title').value = '';
+    document.getElementById('notif-msg').value = '';
+    resEl.style.color = 'var(--green)';
+    resEl.textContent = `✅ Sent to ${res.sent} ${res.sent === 1 ? 'person' : 'people'}.`;
+    setTimeout(() => { resEl.textContent = ''; }, 4000);
+  } else {
+    resEl.style.color = 'var(--red)';
+    resEl.textContent = res.error || 'Could not send.';
+  }
 }
 async function postAnnouncement() {
   const title = document.getElementById('ann-title').value.trim();
   const body  = document.getElementById('ann-body').value.trim();
   if (!title || !body) return alert('Enter a title and message.');
-  await api.post('/api/announcement', { title, body, priority: document.getElementById('ann-priority').value });
+  await api.post('/api/announcement', { title, body, priority: document.getElementById('ann-priority').value, poolId: Number(activePoolId) });
   document.getElementById('ann-title').value = '';
   document.getElementById('ann-body').value = '';
   await refresh();
@@ -875,7 +1131,7 @@ async function deleteAnnouncement(id) {
 async function addResource() {
   const title = document.getElementById('res-title').value.trim();
   if (!title) return alert('Enter a title.');
-  await api.post('/api/resource', { title, desc: document.getElementById('res-desc').value, url: document.getElementById('res-url').value, type: document.getElementById('res-type').value });
+  await api.post('/api/resource', { title, desc: document.getElementById('res-desc').value, url: document.getElementById('res-url').value, type: document.getElementById('res-type').value, poolId: Number(activePoolId) });
   document.getElementById('res-title').value = '';
   document.getElementById('res-desc').value = '';
   document.getElementById('res-url').value = '';
@@ -891,11 +1147,12 @@ async function deleteResource(id) {
 // ── Reports ────────────────────────────────────────────────────────────────
 async function renderReports() {
   await refresh();
-  document.getElementById('rpt-hours').innerHTML = DB.employees.length ? DB.employees.map(emp=>{
-    const total = DB.punches.filter(p=>String(p.empId)===String(emp.id)&&p.hours).reduce((s,p)=>s+parseFloat(p.hours),0);
+  const emps = poolEmployees();
+  document.getElementById('rpt-hours').innerHTML = emps.length ? emps.map(emp=>{
+    const total = DB.punches.filter(p=>String(p.empId)===String(emp.id)&&p.hours&&inPool(p)).reduce((s,p)=>s+parseFloat(p.hours),0);
     return `<tr><td>${emp.name}</td><td>${total.toFixed(2)} hrs</td></tr>`;
   }).join('') : `<tr><td colspan="2" class="empty">No data.</td></tr>`;
-  const logs = DB.chemicals;
+  const logs = DB.chemicals.filter(inPool);
   const pass=logs.filter(r=>r.status==='pass').length;
   const warn=logs.filter(r=>r.status==='warn').length;
   const fail=logs.filter(r=>r.status==='fail').length;
@@ -920,7 +1177,7 @@ async function renderReports() {
 async function exportCSV() {
   const from=document.getElementById('rpt-from').value;
   const to=document.getElementById('rpt-to').value;
-  const logs=DB.chemicals.filter(r=>r.date>=from&&r.date<=to);
+  const logs=DB.chemicals.filter(r=>inPool(r)&&r.date>=from&&r.date<=to);
   const header='Date,Time,Type,Chlorine (ppm),pH,Combined Cl,By,Status,Notes\n';
   const rows=logs.map(r=>[r.date,r.time,r.type,r.cl,r.ph,r.ccl??'',r.by,r.status,`"${(r.notes||'').replace(/"/g,'""')}"`].join(',')).join('\n');
   const blob=new Blob([header+rows],{type:'text/csv'});

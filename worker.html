@@ -534,6 +534,15 @@ select.form-inp{cursor:pointer;}
   </div>
 </div>
 
+<!-- ── POOL PICKER ────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-pool">
+  <div class="name-intro">
+    <h2>Which pool?</h2>
+    <p>Select the pool you're working at</p>
+  </div>
+  <div id="pool-list"><p class="empty">Loading…</p></div>
+</div>
+
 <!-- ── BOARD ──────────────────────────────────────────────────────────── -->
 <div class="screen" id="screen-board">
   <div id="board-status"></div>
@@ -549,7 +558,8 @@ select.form-inp{cursor:pointer;}
   <p class="sub-greeting" id="home-date"></p>
   <div id="home-clock"></div>
   <div id="home-today"></div>
-  <button class="logout-link" onclick="logout()">Switch worker ↩</button>
+  <button class="logout-link" onclick="switchPool()" style="margin-top:18px;color:var(--blue)">🏊 Switch pool</button>
+  <button class="logout-link" onclick="logout()" style="margin-top:8px">Switch worker ↩</button>
 </div>
 
 <!-- ── SCHEDULE ───────────────────────────────────────────────────────── -->
@@ -708,7 +718,54 @@ let ciStep = 0, coStep = 0;
 let chemType = 'hourly';
 let selectedDay = null;  // for week strip
 let pendingConfirmShift = null; // shift being confirmed
+let activePoolId = null, activePoolName = '';
+const urlPool = new URLSearchParams(location.search).get('pool'); // QR deep-link
 const CI_TOTAL = 3, CO_TOTAL = 3;
+
+// ── Pool scoping helpers ────────────────────────────────────────────────────
+function inPool(item) { return Number(item.poolId) === Number(activePoolId); }
+function setPool(id, name) {
+  activePoolId = Number(id);
+  activePoolName = name || '';
+  localStorage.setItem('pm_worker_pool', String(activePoolId));
+  tick();
+}
+async function afterLogin() {
+  const data = await get();
+  const pools = data.pools || [];
+  if (!pools.length) { activePoolId = null; loadHome(); return; }
+  const saved = Number(localStorage.getItem('pm_worker_pool'));
+  const suggested = urlPool ? Number(urlPool) : null;
+  let pick = null;
+  if (suggested && pools.some(p => Number(p.id) === suggested)) pick = suggested;
+  else if (saved && pools.some(p => Number(p.id) === saved)) pick = saved;
+  else if (pools.length === 1) pick = Number(pools[0].id);
+  if (pick != null) {
+    const pl = pools.find(p => Number(p.id) === pick);
+    setPool(pick, pl ? pl.name : '');
+    loadHome();
+  } else {
+    showPoolPicker(pools);
+  }
+}
+function showPoolPicker(pools) {
+  const el = document.getElementById('pool-list');
+  const statusDot = { open:'🟢', limited:'🟡', closed:'🔴' };
+  el.innerHTML = pools.map(p => `
+    <button class="name-btn" onclick="pickPool(${p.id},'${(p.name||'').replace(/'/g,"\\'")}')">
+      <div class="avatar">${statusDot[p.status] || '🏊'}</div>
+      <div style="flex:1">
+        <div style="font-weight:700">${p.name}</div>
+        ${p.address ? `<div style="font-size:.72rem;color:var(--muted);margin-top:2px">📍 ${p.address}</div>` : ''}
+      </div>
+    </button>`).join('');
+  show('pool');
+}
+function pickPool(id, name) { setPool(id, name); loadHome(); }
+function switchPool() {
+  // Re-open the picker so staff can move to another pool
+  get().then(data => showPoolPicker(data.pools || []));
+}
 
 // ══ API ════════════════════════════════════════════════════════════════════
 const get  = async () => (await fetch('/api/data')).json();
@@ -716,7 +773,10 @@ const post = async (path, body) =>
   (await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})).json();
 
 // ══ Utilities ══════════════════════════════════════════════════════════════
-function today() { return new Date().toISOString().slice(0,10); }
+// Local-date formatter — must match the server's local date (NOT UTC), otherwise
+// evening clock-ins land on the wrong day and show "Not Clocked In".
+function ymd(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function today() { return ymd(new Date()); }
 function fmtTime(t) {
   if (!t) return '';
   const [h,m] = t.split(':').map(Number);
@@ -732,8 +792,8 @@ function dayLabel(ds) {
 }
 function initials(name) { return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
 function tick() {
-  document.getElementById('hdr-time').textContent =
-    new Date().toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit'});
+  const t = new Date().toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit'});
+  document.getElementById('hdr-time').textContent = activePoolName ? `${activePoolName} · ${t}` : t;
 }
 setInterval(tick, 1000); tick();
 
@@ -784,11 +844,27 @@ async function markAllRead() {
   await renderNotifications();
 }
 
+// Show a device notification via the service worker (works on Android, where
+// `new Notification()` throws), falling back to the direct constructor. Never throws.
+function firePush(n) {
+  const title = n.title || 'Maralavitch Pool';
+  const opts = { body: n.message, tag: String(n.id), icon: '/favicon.ico' };
+  try {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready.then(reg => {
+        try { reg.showNotification(title, opts); } catch (e) {}
+      }).catch(() => {});
+      return;
+    }
+  } catch (e) {}
+  try { new Notification(title, opts); } catch (e) {}
+}
+
 async function renderNotifications() {
   if (!empId) return;
   const data = await get();
   const notifs = (data.notifications || [])
-    .filter(n => String(n.empId) === String(empId))
+    .filter(n => String(n.empId) === String(empId) && (n.poolId == null || inPool(n)))
     .sort((a,b) => (b.id||0) - (a.id||0));
   const unread = notifs.filter(n => !n.read);
 
@@ -796,20 +872,21 @@ async function renderNotifications() {
   document.getElementById('notif-dot').style.display = unread.length ? 'block' : 'none';
 
   // Request browser notification permission on first unread
-  if (unread.length && typeof Notification !== 'undefined' && Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
-  // Fire browser push for newest unread (only once per load — track in sessionStorage)
-  if (unread.length && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-    const seenKey = 'pm_seen_notifs';
-    const seen = new Set(JSON.parse(sessionStorage.getItem(seenKey) || '[]'));
-    const fresh = unread.filter(n => !seen.has(n.id));
-    fresh.slice(0, 2).forEach(n => {
-      new Notification(n.title || 'Maralavitch Pool', {body: n.message, icon: '/favicon.ico', tag: String(n.id)});
-      seen.add(n.id);
-    });
-    sessionStorage.setItem(seenKey, JSON.stringify([...seen]));
-  }
+  try {
+    if (unread.length && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  } catch (e) { /* never let permission prompt break the flow */ }
+  // Fire device push for newest unread (only once each — tracked in sessionStorage)
+  try {
+    if (unread.length && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      const seenKey = 'pm_seen_notifs';
+      const seen = new Set(JSON.parse(sessionStorage.getItem(seenKey) || '[]'));
+      const fresh = unread.filter(n => !seen.has(n.id));
+      fresh.slice(0, 3).forEach(n => { firePush(n); seen.add(n.id); });
+      sessionStorage.setItem(seenKey, JSON.stringify([...seen]));
+    }
+  } catch (e) { /* notifications are best-effort — never block rendering */ }
 
   // Render list
   const el = document.getElementById('notif-list');
@@ -828,19 +905,21 @@ async function renderNotifications() {
 // ══ Board ═══════════════════════════════════════════════════════════════════
 async function renderBoard() {
   const data = await get();
-  // Pool status
-  const s = data.pool_status || 'open';
+  // Pool status — from the selected pool
+  const pool = (data.pools || []).find(p => Number(p.id) === Number(activePoolId));
+  const s = (pool && pool.status) || data.pool_status || 'open';
   const cfg = {
     open:   {icon:'🟢', label:'Pool is Open',       cls:'open'},
     closed: {icon:'🔴', label:'Pool is Closed',      cls:'closed'},
     limited:{icon:'🟡', label:'Limited Operations',  cls:'limited'},
   };
   const sc = cfg[s] || cfg.open;
+  const poolTag = pool ? `<div style="font-size:.72rem;color:var(--muted);margin-bottom:10px;text-align:center">📍 ${pool.name}</div>` : '';
   document.getElementById('board-status').innerHTML =
-    `<div class="status-banner ${sc.cls}"><span class="status-icon">${sc.icon}</span>${sc.label}</div>`;
+    poolTag + `<div class="status-banner ${sc.cls}"><span class="status-icon">${sc.icon}</span>${sc.label}</div>`;
 
-  // Announcements
-  const anns = data.announcements || [];
+  // Announcements (this pool only)
+  const anns = (data.announcements || []).filter(inPool);
   const aEl = document.getElementById('board-anns');
   aEl.innerHTML = anns.length ? anns.map(a => `
     <div class="ann-card ${a.priority==='urgent'?'urgent':a.priority==='warn'?'warn':''}">
@@ -852,8 +931,8 @@ async function renderBoard() {
     </div>`).join('')
     : '<p class="empty">No announcements yet.</p>';
 
-  // Resources
-  const res = data.resources || [];
+  // Resources (this pool only)
+  const res = (data.resources || []).filter(inPool);
   const rEl = document.getElementById('board-res');
   const icons = {procedure:'📄',contact:'📞',link:'🔗',info:'ℹ️',schedule:'📅'};
   rEl.innerHTML = res.length ? res.map(r => {
@@ -874,8 +953,8 @@ async function loadHome() {
   document.getElementById('home-date').textContent =
     new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
 
-  // Clock status
-  const todayPunches = data.punches.filter(p => String(p.empId)===String(empId) && p.date===today());
+  // Clock status (this pool only)
+  const todayPunches = data.punches.filter(p => String(p.empId)===String(empId) && p.date===today() && inPool(p));
   const openPunch = todayPunches.find(p => !p.out);
   isClockedIn = !!openPunch;
 
@@ -909,8 +988,8 @@ async function loadHome() {
       </div>`;
   }
 
-  // Today's shift summary
-  const todayShifts = data.shifts.filter(s => String(s.empId)===String(empId) && s.date===today());
+  // Today's shift summary (this pool only)
+  const todayShifts = data.shifts.filter(s => String(s.empId)===String(empId) && s.date===today() && inPool(s));
   const todayEl = document.getElementById('home-today');
   if (todayShifts.length) {
     todayEl.innerHTML = `<p class="lbl">Today's Shift</p>` +
@@ -923,7 +1002,7 @@ async function loadHome() {
     todayEl.innerHTML = '';
   }
 
-  await renderNotifications();
+  try { await renderNotifications(); } catch (e) { /* never block the home screen */ }
   show('home');
   document.getElementById('tab-bar').classList.add('visible');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -937,7 +1016,7 @@ function getWeekDates(offsetWeeks) {
   mon.setDate(d.getDate() - day + 1 + offsetWeeks * 7);
   return Array.from({length:7}, (_,i) => {
     const dd = new Date(mon); dd.setDate(mon.getDate()+i);
-    return dd.toISOString().slice(0,10);
+    return ymd(dd);
   });
 }
 
@@ -951,7 +1030,7 @@ async function renderScheduleTab() {
   const strip = document.getElementById('week-strip');
   strip.innerHTML = dates.map((d,i) => {
     const dayNum = new Date(d+'T12:00:00').getUTCDate();
-    const hasShift = data.shifts.some(s => String(s.empId)===String(empId) && s.date===d);
+    const hasShift = data.shifts.some(s => String(s.empId)===String(empId) && s.date===d && inPool(s));
     const isToday = d === t;
     const isSel = d === (selectedDay || t);
     let cls = isToday ? 'today' : isSel ? 'sel' : hasShift ? 'has-shift' : '';
@@ -964,7 +1043,7 @@ async function renderScheduleTab() {
 
   // Selected day detail
   const selDate = selectedDay || t;
-  const dayShifts = data.shifts.filter(s => String(s.empId)===String(empId) && s.date===selDate);
+  const dayShifts = data.shifts.filter(s => String(s.empId)===String(empId) && s.date===selDate && inPool(s));
   const confirmations = data.shift_confirmations || {};
   const detailEl = document.getElementById('day-detail');
   if (dayShifts.length) {
@@ -975,9 +1054,9 @@ async function renderScheduleTab() {
     detailEl.innerHTML = `<p class="empty" style="padding:10px 0">${dayLabel(selDate)} — No shift scheduled</p>`;
   }
 
-  // Upcoming shifts (next 14 days)
+  // Upcoming shifts (next 14 days, this pool only)
   const upcoming = data.shifts
-    .filter(s => String(s.empId)===String(empId) && s.date >= t)
+    .filter(s => String(s.empId)===String(empId) && s.date >= t && inPool(s))
     .sort((a,b) => a.date.localeCompare(b.date))
     .slice(0, 12);
   const upEl = document.getElementById('upcoming-shifts');
@@ -1050,7 +1129,7 @@ async function submitConfirm() {
 }
 
 function renderMyRequests(data) {
-  const myReqs = (data.shift_requests || []).filter(r => String(r.empId) === String(empId));
+  const myReqs = (data.shift_requests || []).filter(r => String(r.empId) === String(empId) && inPool(r));
   const el = document.getElementById('sched-requests');
   if (!el) return;
   if (!myReqs.length) { el.innerHTML = '<p class="empty">No requests submitted yet.</p>'; return; }
@@ -1101,7 +1180,7 @@ async function selectWorker(id, name, hasPassword) {
     empId = String(id); empName = name;
     localStorage.setItem('pm_worker_id', empId);
     localStorage.setItem('pm_worker_name', empName);
-    await loadHome();
+    await afterLogin();
   }
 }
 
@@ -1117,7 +1196,7 @@ async function submitPassword() {
       empId = pendingEmpId; empName = pendingEmpName;
       localStorage.setItem('pm_worker_id', empId);
       localStorage.setItem('pm_worker_name', empName);
-      await loadHome();
+      await afterLogin();
     } else {
       document.getElementById('pw-err').textContent = '❌ Incorrect password. Try again.';
       document.getElementById('pw-input').value = '';
@@ -1155,9 +1234,10 @@ async function submitChem() {
   const now = new Date();
   try {
     await post('/api/chemical', {
-      date: now.toISOString().slice(0,10),
+      date: ymd(now),
       time: now.toTimeString().slice(0,5),
       type: chemType, cl, ph, ccl, by: empName,
+      poolId: Number(activePoolId),
       notes: document.getElementById('chem-notes-val').value
     });
     const clOk=cl>=1&&cl<=3, phOk=ph>=7.2&&ph<=7.8, cclOk=ccl===null||ccl<0.5;
@@ -1293,9 +1373,15 @@ async function ciConfirm(){
   if(ciAnswers.life_ring==='no') flags.push('Life ring MISSING');
   if(ciAnswers.reach_pole==='no') flags.push('Reach pole MISSING');
   if(ciAnswers.first_aid&&ciAnswers.first_aid!=='stocked') flags.push('First aid kit: '+ciAnswers.first_aid);
-  const res=await post('/api/punch/in',{empId,empName,answers:ciAnswers,flags});
+  const res=await post('/api/punch/in',{empId,empName,answers:ciAnswers,flags,poolId:Number(activePoolId)});
   if(res.error){alert(res.error);return;}
-  showResult('in',flags,res.punch);
+  isClockedIn = true;
+  // After the start-of-shift questionnaire, go straight to the home screen.
+  // If anything was flagged, surface it so the worker knows it went to management.
+  if (flags.length) {
+    alert('✅ Clocked in!\n\n⚠️ Issues flagged for management:\n• ' + flags.join('\n• '));
+  }
+  await loadHome();
 }
 
 // ══ Clock Out Wizard ═══════════════════════════════════════════════════════
@@ -1389,7 +1475,7 @@ async function coConfirm(){
   if(coPhoto){const r=await post('/api/photo',{data:coPhoto});photoFilename=r.filename||null;}
   const missing=CHECKLIST.filter(i=>i.required&&!coAnswers[i.key]).map(i=>i.label);
   const flags=missing.map(m=>`Not completed: ${m}`);
-  const res=await post('/api/punch/out',{empId,empName,answers:coAnswers,photo:photoFilename,flags});
+  const res=await post('/api/punch/out',{empId,empName,answers:coAnswers,photo:photoFilename,flags,poolId:Number(activePoolId)});
   if(res.error){alert(res.error);return;}
   showResult('out',flags,res.punch);
 }
@@ -1452,11 +1538,13 @@ async function submitRequest(){
       if(!date||!start||!end){alert('Please fill in date and times.');return;}
       await post('/api/shift-request',{empId,empName,type:'shift',date,start,end,
         role:document.getElementById('req-role').value,
+        poolId:Number(activePoolId),
         notes:document.getElementById('req-notes').value});
     } else {
       const date=document.getElementById('req-do-date').value;
       if(!date){alert('Please select a date.');return;}
       await post('/api/shift-request',{empId,empName,type:'day_off',date,
+        poolId:Number(activePoolId),
         reason:document.getElementById('req-do-reason').value});
     }
     cancelRequest();
@@ -1474,11 +1562,15 @@ async function init() {
   const savedName = localStorage.getItem('pm_worker_name');
   if (savedId && savedName) {
     empId = savedId; empName = savedName;
-    await loadHome();
+    await afterLogin();
   } else {
     await loadNameList();
     show('name');
   }
+  // Poll for new notifications (e.g. messages from management) ~every 30s
+  setInterval(() => {
+    if (empId && activePoolId != null) renderNotifications().catch(() => {});
+  }, 30000);
 }
 init();
 </script>
