@@ -7,12 +7,17 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
-    --blue:#0077b6; --blue-light:#90e0ef; --blue-dark:#023e8a;
-    --green:#2dc653; --red:#e63946; --yellow:#f4a261;
-    --bg:#f0f9ff; --card:#ffffff; --text:#1a1a2e; --muted:#6c757d; --border:#dee2e6; --radius:10px;
+    /* Brand blue — shades give depth & hierarchy */
+    --blue:#0284c7; --blue-light:#7dd3fc; --blue-dark:#023e8a;
+    /* Semantic colors — each hue means something */
+    --green:#16a34a; --green-light:#dcfce7;   /* good / pass / open */
+    --red:#dc2626;   --red-light:#fee2e2;      /* problem / fail / closed */
+    --yellow:#d97706; --yellow-light:#fef3c7;  /* caution / warn / limited */
+    /* Neutrals */
+    --bg:#f1f5f9; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --radius:10px;
   }
   * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+  body { font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; letter-spacing:-0.011em; }
   header { background:var(--blue-dark); color:white; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; box-shadow:0 2px 8px rgba(0,0,0,.3); }
   header h1 { font-size:1.2rem; font-weight:700; }
   header span { font-size:.8rem; opacity:.75; }
@@ -59,6 +64,9 @@
   .range-hint { font-size:.72rem; color:var(--muted); }
   .day-pill { padding:7px 11px; border:1px solid var(--border); border-radius:6px; background:#fff; font-size:.8rem; font-weight:700; color:var(--muted); cursor:pointer; }
   .day-pill.on { background:var(--blue); color:#fff; border-color:var(--blue); }
+  .sched-legend { display:flex; flex-wrap:wrap; gap:6px 14px; margin-bottom:12px; }
+  .sched-legend .lg { display:inline-flex; align-items:center; gap:6px; font-size:.74rem; color:var(--muted); font-weight:600; }
+  .sched-legend .lg-dot { width:13px; height:13px; border-radius:3px; flex-shrink:0; }
   /* QR section */
   .qr-section { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
   #qrcode { background:white; padding:10px; border-radius:8px; border:2px solid var(--blue-light); }
@@ -178,6 +186,7 @@
       <button class="btn btn-sm btn-primary" onclick="changeWeek(1)">Next →</button>
       <button class="btn btn-sm" style="background:#e2e8f0" onclick="changeWeek(0)">Today's Week</button>
     </div>
+    <div id="sched-legend" class="sched-legend"></div>
     <div class="sched-grid">
       <table class="sched-table">
         <thead id="sched-head"></thead>
@@ -953,6 +962,19 @@ async function renderSchedule() {
   const todayStr = today();
   document.getElementById('sched-week-label').textContent =
     `${new Date(dates[0]).toLocaleDateString('en-US',{month:'short',day:'numeric',timeZone:'UTC'})} – ${new Date(dates[6]).toLocaleDateString('en-US',{day:'numeric',timeZone:'UTC'})}`;
+  // Color legend — roles in play this week (staff badges + shift blocks)
+  const legendEl = document.getElementById('sched-legend');
+  if (legendEl) {
+    const used = new Set([
+      ...poolEmployees().map(e => e.role),
+      ...DB.shifts.filter(s => inPool(s) && dates.includes(s.date)).map(s => s.role),
+    ].filter(Boolean));
+    const ordered = Object.keys(ROLE_COLORS).filter(r => used.has(r));
+    legendEl.innerHTML = ordered.map(r => {
+      const c = rc(r);
+      return `<span class="lg"><span class="lg-dot" style="background:${c.bg};border:1.5px solid ${c.border}"></span><span style="color:${c.fg}">${r}</span></span>`;
+    }).join('');
+  }
   document.getElementById('sched-head').innerHTML =
     '<tr><th style="min-width:110px">Employee</th>'+dates.map((d,i) => {
       const isToday = d === todayStr;

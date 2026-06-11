@@ -36,10 +36,12 @@
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html{transition:background .18s;}
 body{
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
   background:var(--bg);color:var(--text);
   min-height:100vh;max-width:480px;margin:0 auto;
   transition:background .18s,color .18s;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  letter-spacing:-0.011em;
 }
 
 /* ── Header ────────────────────────────────────────────────────────────── */
@@ -236,8 +238,11 @@ header{
 .week-strip{
   display:flex;gap:4px;padding:4px;
   background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);
-  margin-bottom:12px;
+  margin-bottom:10px;
 }
+.sched-legend{display:flex;flex-wrap:wrap;gap:5px 12px;margin-bottom:12px;padding:0 2px;}
+.sched-legend .lg{display:inline-flex;align-items:center;gap:5px;font-size:.72rem;color:var(--muted);font-weight:600;}
+.sched-legend .lg-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0;}
 .day-pip{
   flex:1;padding:8px 2px;border-radius:10px;text-align:center;cursor:pointer;
   transition:background .15s;
@@ -591,6 +596,7 @@ select.form-inp{cursor:pointer;}
 <div class="screen" id="screen-schedule">
   <p class="lbl" style="margin-top:4px">This Week</p>
   <div class="week-strip" id="week-strip"></div>
+  <div id="sched-legend" class="sched-legend"></div>
   <div id="day-detail"></div>
   <p class="lbl" style="margin-top:2px">Upcoming Shifts</p>
   <div id="upcoming-shifts"></div>
@@ -817,6 +823,19 @@ function dayLabel(ds) {
   return new Date(ds+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
 }
 function initials(name) { return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+
+// Role → accent color (works on light & dark; white text reads on all of these)
+const ROLE_COLORS = {
+  'Pool Owner':  '#9333ea',
+  'Owner':       '#4f46e5',
+  'Manager':     '#2563eb',
+  'Head Guard':  '#0891b2',
+  'Lifeguard':   '#16a34a',
+  'Staffer':     '#475569',
+  'Cashier':     '#d97706',
+  'Maintenance': '#6b7280',
+};
+function rc(role) { return ROLE_COLORS[role] || '#2563eb'; }
 function tick() {
   const t = new Date().toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit'});
   document.getElementById('hdr-time').textContent = activePoolName ? `${activePoolName} · ${t}` : t;
@@ -1039,11 +1058,14 @@ async function loadHome() {
   const todayEl = document.getElementById('home-today');
   if (todayShifts.length) {
     todayEl.innerHTML = `<p class="lbl">Today's Shift</p>` +
-      todayShifts.map(s => `
-        <div class="today-strip">
-          <div class="ts-time">${fmtTime(s.start)} – ${fmtTime(s.end)}</div>
-          <div class="ts-role">${s.role}</div>
-        </div>`).join('');
+      todayShifts.map(s => {
+        const a = rc(s.role);
+        return `
+        <div class="today-strip" style="border-left-color:${a}">
+          <div class="ts-time" style="color:${a}">${fmtTime(s.start)} – ${fmtTime(s.end)}</div>
+          <div class="ts-role"><span style="display:inline-block;background:${a};color:#fff;border-radius:20px;padding:1px 9px;font-weight:700;font-size:.72rem">${s.role}</span></div>
+        </div>`;
+      }).join('');
   } else {
     todayEl.innerHTML = '';
   }
@@ -1146,14 +1168,16 @@ async function renderScheduleTab() {
   const strip = document.getElementById('week-strip');
   strip.innerHTML = dates.map((d,i) => {
     const dayNum = new Date(d+'T12:00:00').getUTCDate();
-    const hasShift = data.shifts.some(s => String(s.empId)===String(empId) && s.date===d && inPool(s));
+    const dayShiftsHere = data.shifts.filter(s => String(s.empId)===String(empId) && s.date===d && inPool(s));
+    const hasShift = dayShiftsHere.length > 0;
+    const dotColor = hasShift ? rc(dayShiftsHere[0].role) : null;
     const isToday = d === t;
     const isSel = d === (selectedDay || t);
     let cls = isToday ? 'today' : isSel ? 'sel' : hasShift ? 'has-shift' : '';
     return `<div class="day-pip ${cls}" onclick="selectDay('${d}')">
       <div class="dp-name">${dayLetters[i]}</div>
       <div class="dp-num">${dayNum}</div>
-      ${hasShift ? '<div class="dp-dot"></div>' : '<div style="height:7px"></div>'}
+      ${hasShift ? `<div class="dp-dot" style="background:${isToday?'#fff':dotColor};opacity:1"></div>` : '<div style="height:7px"></div>'}
     </div>`;
   }).join('');
 
@@ -1168,6 +1192,17 @@ async function renderScheduleTab() {
       dayShifts.map(s => renderAgendaItem(s, confirmations, t)).join('');
   } else {
     detailEl.innerHTML = `<p class="empty" style="padding:10px 0">${dayLabel(selDate)} — No shift scheduled</p>`;
+  }
+
+  // Color legend — show the distinct roles among the worker's shifts
+  const legendEl = document.getElementById('sched-legend');
+  if (legendEl) {
+    const myRoles = [...new Set(data.shifts
+      .filter(s => String(s.empId)===String(empId) && inPool(s))
+      .map(s => s.role))];
+    legendEl.innerHTML = myRoles.length > 1
+      ? myRoles.map(r => `<span class="lg"><span class="lg-dot" style="background:${rc(r)}"></span>${r}</span>`).join('')
+      : '';
   }
 
   // Upcoming shifts (next 14 days, this pool only)
@@ -1204,16 +1239,17 @@ function renderAgendaItem(s, confirmations, t) {
     }
   }
 
+  const accent = rc(s.role);
   return `
-    <div class="agenda ${cls}">
+    <div class="agenda ${cls}" style="border-left-color:${accent}">
       <div class="agenda-date">
         <div class="adn">${dayName}</div>
-        <div class="add">${dayNum}</div>
+        <div class="add" style="${isToday?'':'color:'+accent}">${dayNum}</div>
       </div>
       <div class="agenda-info">
         <div class="agenda-time">${fmtTime(s.start)} – ${fmtTime(s.end)}</div>
-        ${!isToday && !isPast ? `<div style="font-size:.72rem;color:var(--muted);margin-top:2px">${dayLabel(s.date)}</div>` : ''}
-        <span class="agenda-role">${s.role}</span>
+        ${isToday ? '<div style="font-size:.72rem;color:var(--green);font-weight:700;margin-top:2px">● Today</div>' : (!isPast ? `<div style="font-size:.72rem;color:var(--muted);margin-top:2px">${dayLabel(s.date)}</div>` : '')}
+        <span class="agenda-role" style="background:${accent};color:#fff">${s.role}</span>
       </div>
       <div class="agenda-actions">${confirmHtml}</div>
     </div>`;
