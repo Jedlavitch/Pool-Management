@@ -57,6 +57,8 @@
   .dot-in { background:var(--green); }
   .dot-out { background:var(--muted); }
   .range-hint { font-size:.72rem; color:var(--muted); }
+  .day-pill { padding:7px 11px; border:1px solid var(--border); border-radius:6px; background:#fff; font-size:.8rem; font-weight:700; color:var(--muted); cursor:pointer; }
+  .day-pill.on { background:var(--blue); color:#fff; border-color:var(--blue); }
   /* QR section */
   .qr-section { display:flex; align-items:center; gap:20px; flex-wrap:wrap; }
   #qrcode { background:white; padding:10px; border-radius:8px; border:2px solid var(--blue-light); }
@@ -191,23 +193,12 @@
   </div>
 
   <div class="card">
-    <h2>Add Shift</h2>
+    <h2>Add Shift(s)</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">Schedule one person for a single day, or for many days at once — pick a date range and (optionally) which weekdays repeat.</p>
     <div class="form-row">
       <div class="form-group">
         <label>Employee</label>
         <select id="sched-emp"></select>
-      </div>
-      <div class="form-group">
-        <label>Date</label>
-        <input type="date" id="sched-date" />
-      </div>
-      <div class="form-group">
-        <label>Start</label>
-        <input type="time" id="sched-start" />
-      </div>
-      <div class="form-group">
-        <label>End</label>
-        <input type="time" id="sched-end" />
       </div>
       <div class="form-group">
         <label>Role</label>
@@ -217,10 +208,40 @@
           <option>Staffer</option><option>Cashier</option><option>Maintenance</option>
         </select>
       </div>
-      <div class="form-group" style="flex:0">
-        <label>&nbsp;</label>
-        <button class="btn btn-primary" onclick="addShift()">Add Shift</button>
+      <div class="form-group">
+        <label>Start</label>
+        <input type="time" id="sched-start" />
       </div>
+      <div class="form-group">
+        <label>End</label>
+        <input type="time" id="sched-end" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>From date</label>
+        <input type="date" id="sched-date" />
+      </div>
+      <div class="form-group">
+        <label>To date <span class="range-hint">optional</span></label>
+        <input type="date" id="sched-date-end" />
+      </div>
+      <div class="form-group" style="flex:2">
+        <label>Repeat on <span class="range-hint">optional — leave empty for every day in range</span></label>
+        <div id="sched-days" style="display:flex;gap:5px;flex-wrap:wrap;padding-top:2px">
+          <button type="button" class="day-pill" data-day="1" onclick="toggleDayPill(this)">Mon</button>
+          <button type="button" class="day-pill" data-day="2" onclick="toggleDayPill(this)">Tue</button>
+          <button type="button" class="day-pill" data-day="3" onclick="toggleDayPill(this)">Wed</button>
+          <button type="button" class="day-pill" data-day="4" onclick="toggleDayPill(this)">Thu</button>
+          <button type="button" class="day-pill" data-day="5" onclick="toggleDayPill(this)">Fri</button>
+          <button type="button" class="day-pill" data-day="6" onclick="toggleDayPill(this)">Sat</button>
+          <button type="button" class="day-pill" data-day="0" onclick="toggleDayPill(this)">Sun</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-row" style="align-items:center;margin-bottom:0">
+      <span id="sched-add-result" style="flex:1;font-size:.82rem;color:var(--muted)">Tip: set the same days, change the time, and add again to give someone two shifts in a day.</span>
+      <button class="btn btn-primary" onclick="addShift()">Add Shift(s)</button>
     </div>
   </div>
 </div>
@@ -243,8 +264,12 @@
   </div>
   <div class="card">
     <h2>☕ Breaks</h2>
-    <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">Assign a break to a staff member — they'll get a notification and can start it from their phone.</p>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">Assign a break to a staff member — they'll get a notification and can start it from their phone. <strong>Only managers and staffers can assign breaks.</strong></p>
     <div class="form-row">
+      <div class="form-group">
+        <label>Assigned by</label>
+        <select id="brk-by"></select>
+      </div>
       <div class="form-group">
         <label>Employee</label>
         <select id="brk-emp"></select>
@@ -802,6 +827,12 @@ function refreshEmpSelects() {
     const el = document.getElementById(id);
     if (el) el.innerHTML = opts || empty;
   });
+  // Break assigners — managers & staffers only
+  const assigners = poolEmployees().filter(e => e.role === 'Manager' || e.role === 'Staffer');
+  const byEl = document.getElementById('brk-by');
+  if (byEl) byEl.innerHTML = assigners.length
+    ? assigners.map(e => `<option value="${e.id}">${e.name} · ${e.role}</option>`).join('')
+    : '<option value="">— none at this pool —</option>';
 }
 
 // ── Chemicals ─────────────────────────────────────────────────────────────
@@ -881,16 +912,33 @@ function getWeekDates(offset) {
   return Array.from({length:7}, (_,i) => { const dd=new Date(monday); dd.setDate(monday.getDate()+i); return ymd(dd); });
 }
 function changeWeek(dir) { currentWeekOffset = dir===0 ? 0 : currentWeekOffset+dir; renderSchedule(); }
+function toggleDayPill(btn) { btn.classList.toggle('on'); }
+
 async function addShift() {
   const empId = document.getElementById('sched-emp').value;
-  const date = document.getElementById('sched-date').value;
+  const from  = document.getElementById('sched-date').value;
+  const to    = document.getElementById('sched-date-end').value || from;
   const start = document.getElementById('sched-start').value;
-  const end = document.getElementById('sched-end').value;
-  if (!empId||!date||!start||!end) return alert('Fill all shift fields.');
-  const emp = DB.employees.find(e=>String(e.id)===String(empId));
-  await api.post('/api/shift', { empId, empName:emp?.name||'?', date, start, end, role:document.getElementById('sched-role').value, poolId:Number(activePoolId) });
+  const end   = document.getElementById('sched-end').value;
+  const role  = document.getElementById('sched-role').value;
+  if (!empId || !from || !start || !end) return alert('Fill in employee, From date, start and end.');
+  const d0 = new Date(from + 'T12:00:00'), d1 = new Date(to + 'T12:00:00');
+  if (d1 < d0) return alert('"To date" is before "From date".');
+  const days = [...document.querySelectorAll('#sched-days .day-pill.on')].map(b => Number(b.dataset.day));
+  const dates = [];
+  for (let d = new Date(d0); d <= d1; d.setDate(d.getDate() + 1)) {
+    if (!days.length || days.includes(d.getDay())) dates.push(ymd(d));
+  }
+  if (!dates.length) return alert('No matching days in that range — check the weekday selection.');
+  const emp = DB.employees.find(e => String(e.id) === String(empId));
+  const shifts = dates.map(date => ({
+    empId, empName: emp?.name || '?', date, start, end, role, poolId: Number(activePoolId)
+  }));
+  const res = await api.post('/api/shifts/bulk', { shifts });
   await refresh();
   renderSchedule();
+  const r = document.getElementById('sched-add-result');
+  if (r) { r.style.color = 'var(--green)'; r.textContent = `✅ Added ${res.count} shift${res.count !== 1 ? 's' : ''} for ${emp?.name || ''}.`; }
 }
 async function deleteShift(id) {
   await api.post('/api/shift/delete', { id });
@@ -1086,15 +1134,19 @@ async function renderTimeclock() {
 // ── Breaks ──────────────────────────────────────────────────────────────────
 async function addBreak() {
   const empId = document.getElementById('brk-emp').value;
+  const assignedBy = document.getElementById('brk-by').value;
   if (!empId) return alert('Select an employee.');
+  if (!assignedBy) return alert('Only managers and staffers can assign breaks — none are staffed at this pool. Assign someone the Manager or Staffer role first.');
   const emp = DB.employees.find(e=>String(e.id)===String(empId));
-  await api.post('/api/break', {
+  const res = await api.post('/api/break', {
     empId, empName: emp?.name || '?',
     date: document.getElementById('brk-date').value || today(),
     start: document.getElementById('brk-start').value || '',
     duration: parseInt(document.getElementById('brk-duration').value, 10),
+    assignedBy,
     poolId: Number(activePoolId),
   });
+  if (!res.ok) return alert(res.error || 'Could not add break.');
   document.getElementById('brk-start').value = '';
   await refresh();
   renderBreaks();
@@ -1116,7 +1168,7 @@ function renderBreaks() {
                              `<span class="badge" style="background:#e0e7ff;color:#3730a3">Scheduled</span>`;
   el.innerHTML = `<table><thead><tr><th>Employee</th><th>When</th><th>Length</th><th>Status</th><th></th></tr></thead><tbody>${
     todays.map(b => `<tr>
-      <td><strong>${b.empName}</strong></td>
+      <td><strong>${b.empName}</strong>${b.assignedByName ? `<div style="font-size:.7rem;color:var(--muted)">assigned by ${b.assignedByName}</div>` : ''}</td>
       <td>${b.start ? fmtTime(b.start) : '<span style="color:var(--muted)">Anytime</span>'}</td>
       <td>${b.duration} min</td>
       <td>${statusBadge(b)}</td>

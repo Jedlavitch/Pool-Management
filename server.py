@@ -331,6 +331,39 @@ class Handler(BaseHTTPRequestHandler):
             save_data(data)
             self.send_json({'ok': True, 'shift': body})
 
+        elif p == '/api/shifts/bulk':
+            # Create many shifts at once (one person, multiple days), with a single
+            # summary notification instead of one per shift.
+            shifts = body.get('shifts', [])
+            if not shifts:
+                self.send_json({'ok': False, 'error': 'No shifts provided'}, 400)
+            else:
+                base = ts()
+                created = []
+                for i, s in enumerate(shifts):
+                    s['id'] = base + i
+                    data['shifts'].append(s)
+                    created.append(s)
+                emp_id = str(created[0].get('empId', ''))
+                if emp_id:
+                    def _fmtd(ds):
+                        try:
+                            return datetime.strptime(ds, '%Y-%m-%d').strftime('%b %-d')
+                        except Exception:
+                            return ds
+                    dates = sorted(s.get('date', '') for s in created)
+                    n = len(created)
+                    span = _fmtd(dates[0]) if n == 1 else f"{_fmtd(dates[0])} – {_fmtd(dates[-1])}"
+                    data.setdefault('notifications', []).insert(0, {
+                        'id': base + len(created) + 1,
+                        'empId': emp_id, 'poolId': created[0].get('poolId'),
+                        'title': '📅 New Shifts Scheduled',
+                        'message': f"You've been scheduled for {n} shift{'s' if n != 1 else ''} ({span}).",
+                        'read': False, 'ts': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                    })
+                save_data(data)
+                self.send_json({'ok': True, 'count': len(created)})
+
         elif p == '/api/shift/delete':
             data['shifts'] = [s for s in data['shifts'] if s['id'] != body['id']]
             save_data(data)
@@ -532,33 +565,38 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({'ok': True})
 
         elif p == '/api/break':
-            # Management assigns a break to an employee
-            body['id'] = ts()
-            body.setdefault('status', 'scheduled')
-            body.setdefault('startedAt', None)
-            body.setdefault('endedAt', None)
-            body.setdefault('actualMinutes', None)
-            data.setdefault('breaks', []).append(body)
-            # Notify the employee
-            emp_id = str(body.get('empId', ''))
-            if emp_id:
-                def _fmt(t):
-                    if not t: return ''
-                    try:
-                        h, m = int(t[:2]), int(t[3:5])
-                        return f"{h%12 or 12}:{m:02d} {'AM' if h<12 else 'PM'}"
-                    except Exception:
-                        return t
-                dur = body.get('duration', '')
-                when = body.get('start')
-                msg = f"You have a {dur}-minute break" + (f" at {_fmt(when)}" if when else "") + " today."
-                data.setdefault('notifications', []).insert(0, {
-                    'id': ts() + 1, 'empId': emp_id, 'poolId': body.get('poolId'),
-                    'title': '☕ Break Scheduled', 'message': msg, 'read': False,
-                    'ts': datetime.now().strftime('%Y-%m-%d %H:%M'),
-                })
-            save_data(data)
-            self.send_json({'ok': True, 'break': body})
+            # Only managers and staffers may assign breaks
+            assigner = next((e for e in data['employees'] if str(e['id']) == str(body.get('assignedBy', ''))), None)
+            if not assigner or assigner.get('role') not in ('Manager', 'Staffer'):
+                self.send_json({'ok': False, 'error': 'Only managers and staffers can assign breaks.'}, 403)
+            else:
+                body['id'] = ts()
+                body['assignedByName'] = assigner.get('name', '')
+                body.setdefault('status', 'scheduled')
+                body.setdefault('startedAt', None)
+                body.setdefault('endedAt', None)
+                body.setdefault('actualMinutes', None)
+                data.setdefault('breaks', []).append(body)
+                # Notify the employee
+                emp_id = str(body.get('empId', ''))
+                if emp_id:
+                    def _fmt(t):
+                        if not t: return ''
+                        try:
+                            h, m = int(t[:2]), int(t[3:5])
+                            return f"{h%12 or 12}:{m:02d} {'AM' if h<12 else 'PM'}"
+                        except Exception:
+                            return t
+                    dur = body.get('duration', '')
+                    when = body.get('start')
+                    msg = f"You have a {dur}-minute break" + (f" at {_fmt(when)}" if when else "") + " today."
+                    data.setdefault('notifications', []).insert(0, {
+                        'id': ts() + 1, 'empId': emp_id, 'poolId': body.get('poolId'),
+                        'title': '☕ Break Scheduled', 'message': msg, 'read': False,
+                        'ts': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                    })
+                save_data(data)
+                self.send_json({'ok': True, 'break': body})
 
         elif p == '/api/break/start':
             br = next((b for b in data.get('breaks', []) if b['id'] == body.get('id')), None)
