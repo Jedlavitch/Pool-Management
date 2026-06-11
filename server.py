@@ -52,10 +52,10 @@ def get_local_ip():
     return '127.0.0.1'
 
 def default_data():
-    return {'employees': [], 'chemicals': [], 'shifts': [], 'punches': [], 'announcements': [], 'resources': [], 'pool_status': 'open', 'shift_requests': [], 'notifications': [], 'shift_confirmations': {}, 'pools': []}
+    return {'employees': [], 'chemicals': [], 'shifts': [], 'punches': [], 'announcements': [], 'resources': [], 'pool_status': 'open', 'shift_requests': [], 'notifications': [], 'shift_confirmations': {}, 'pools': [], 'breaks': []}
 
 # Entities that belong to a single pool and carry a poolId
-POOL_SCOPED = ('shifts', 'chemicals', 'punches', 'announcements', 'resources', 'shift_requests', 'notifications')
+POOL_SCOPED = ('shifts', 'chemicals', 'punches', 'announcements', 'resources', 'shift_requests', 'notifications', 'breaks')
 
 def migrate(data):
     """Bring older single-pool data forward to the multi-pool model. Idempotent —
@@ -528,6 +528,67 @@ class Handler(BaseHTTPRequestHandler):
                 'ts': datetime.now().strftime('%Y-%m-%d %H:%M'),
                 'note': note
             }
+            save_data(data)
+            self.send_json({'ok': True})
+
+        elif p == '/api/break':
+            # Management assigns a break to an employee
+            body['id'] = ts()
+            body.setdefault('status', 'scheduled')
+            body.setdefault('startedAt', None)
+            body.setdefault('endedAt', None)
+            body.setdefault('actualMinutes', None)
+            data.setdefault('breaks', []).append(body)
+            # Notify the employee
+            emp_id = str(body.get('empId', ''))
+            if emp_id:
+                def _fmt(t):
+                    if not t: return ''
+                    try:
+                        h, m = int(t[:2]), int(t[3:5])
+                        return f"{h%12 or 12}:{m:02d} {'AM' if h<12 else 'PM'}"
+                    except Exception:
+                        return t
+                dur = body.get('duration', '')
+                when = body.get('start')
+                msg = f"You have a {dur}-minute break" + (f" at {_fmt(when)}" if when else "") + " today."
+                data.setdefault('notifications', []).insert(0, {
+                    'id': ts() + 1, 'empId': emp_id, 'poolId': body.get('poolId'),
+                    'title': '☕ Break Scheduled', 'message': msg, 'read': False,
+                    'ts': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                })
+            save_data(data)
+            self.send_json({'ok': True, 'break': body})
+
+        elif p == '/api/break/start':
+            br = next((b for b in data.get('breaks', []) if b['id'] == body.get('id')), None)
+            if br:
+                br['status'] = 'active'
+                br['startedAt'] = datetime.now().strftime('%H:%M')
+                save_data(data)
+                self.send_json({'ok': True, 'break': br})
+            else:
+                self.send_json({'ok': False, 'error': 'Not found'}, 404)
+
+        elif p == '/api/break/end':
+            br = next((b for b in data.get('breaks', []) if b['id'] == body.get('id')), None)
+            if br:
+                br['status'] = 'completed'
+                br['endedAt'] = datetime.now().strftime('%H:%M')
+                if br.get('startedAt'):
+                    try:
+                        a = datetime.strptime(br['startedAt'], '%H:%M')
+                        z = datetime.strptime(br['endedAt'], '%H:%M')
+                        br['actualMinutes'] = max(0, round((z - a).seconds / 60))
+                    except Exception:
+                        pass
+                save_data(data)
+                self.send_json({'ok': True, 'break': br})
+            else:
+                self.send_json({'ok': False, 'error': 'Not found'}, 404)
+
+        elif p == '/api/break/delete':
+            data['breaks'] = [b for b in data.get('breaks', []) if b['id'] != body['id']]
             save_data(data)
             self.send_json({'ok': True})
 

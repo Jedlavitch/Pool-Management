@@ -415,6 +415,21 @@ select.form-inp{cursor:pointer;}
 .clockin-flags ul{margin:0 0 10px;padding-left:18px;}
 .clockin-flags li{font-size:.82rem;color:var(--text);padding:2px 0;}
 .clockin-flags button{background:var(--yellow);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:.8rem;font-weight:700;cursor:pointer;}
+
+/* ── Breaks ────────────────────────────────────────────────────────────── */
+.break-card{background:var(--card);border-radius:var(--r-sm);padding:13px 15px;margin-bottom:8px;box-shadow:var(--shadow);border-left:4px solid #a855f7;display:flex;align-items:center;gap:12px;}
+.break-card.active{background:#faf5ff;border-left-color:#a855f7;}
+[data-theme="dark"] .break-card.active{background:#2a1f3a;}
+.break-card.done{opacity:.55;border-left-color:var(--green);}
+.break-emoji{font-size:1.5rem;flex-shrink:0;}
+.break-info{flex:1;min-width:0;}
+.break-title{font-weight:700;font-size:.9rem;color:var(--text);}
+.break-meta{font-size:.76rem;color:var(--muted);margin-top:2px;}
+.break-timer{font-size:1.05rem;font-weight:800;color:#9333ea;font-variant-numeric:tabular-nums;}
+.break-btn{flex-shrink:0;padding:10px 16px;border:none;border-radius:10px;font-size:.84rem;font-weight:800;cursor:pointer;transition:opacity .15s;}
+.break-btn:active{opacity:.85;}
+.break-btn.start{background:#a855f7;color:#fff;}
+.break-btn.end{background:var(--red);color:#fff;}
 .btn-home{
   width:100%;padding:15px;background:var(--blue-dk);color:#fff;
   border:none;border-radius:var(--r-sm);font-size:.92rem;font-weight:700;cursor:pointer;margin-top:8px;
@@ -566,6 +581,7 @@ select.form-inp{cursor:pointer;}
   <p class="sub-greeting" id="home-date"></p>
   <div id="home-clock"></div>
   <div id="home-flag-banner"></div>
+  <div id="home-breaks"></div>
   <div id="home-today"></div>
   <button class="logout-link" onclick="switchPool()" style="margin-top:18px;color:var(--blue)">🏊 Switch pool</button>
   <button class="logout-link" onclick="logout()" style="margin-top:8px">Switch worker ↩</button>
@@ -1015,6 +1031,9 @@ async function loadHome() {
     }
   }
 
+  // My breaks for today
+  renderHomeBreaks(data);
+
   // Today's shift summary (this pool only)
   const todayShifts = data.shifts.filter(s => String(s.empId)===String(empId) && s.date===today() && inPool(s));
   const todayEl = document.getElementById('home-today');
@@ -1034,6 +1053,76 @@ async function loadHome() {
   document.getElementById('tab-bar').classList.add('visible');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-home').classList.add('active');
+}
+
+// ══ Breaks ══════════════════════════════════════════════════════════════════
+let breakTimer = null;
+function minutesBetween(startHHMM) {
+  const [h, m] = startHHMM.split(':').map(Number);
+  const start = new Date(); start.setHours(h, m, 0, 0);
+  return Math.max(0, Math.floor((Date.now() - start) / 1000));
+}
+function fmtElapsed(startHHMM) {
+  const sec = minutesBetween(startHHMM);
+  return `${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;
+}
+function renderHomeBreaks(data) {
+  const el = document.getElementById('home-breaks');
+  if (!el) return;
+  if (breakTimer) { clearInterval(breakTimer); breakTimer = null; }
+  const myBreaks = (data.breaks || [])
+    .filter(b => String(b.empId)===String(empId) && b.date===today() && inPool(b))
+    .sort((a,b) => (a.start||'').localeCompare(b.start||''));
+  if (!myBreaks.length) { el.innerHTML = ''; return; }
+
+  el.innerHTML = `<p class="lbl">My Break${myBreaks.length>1?'s':''}</p>` + myBreaks.map(b => {
+    if (b.status === 'active') {
+      return `<div class="break-card active">
+        <div class="break-emoji">☕</div>
+        <div class="break-info">
+          <div class="break-title">On Break · <span class="break-timer" id="brk-timer-${b.id}">0:00</span></div>
+          <div class="break-meta">Started ${fmtTime(b.startedAt)} · ${b.duration} min allotted</div>
+        </div>
+        <button class="break-btn end" onclick="endBreak(${b.id})">End Break</button>
+      </div>`;
+    }
+    if (b.status === 'completed') {
+      return `<div class="break-card done">
+        <div class="break-emoji">✓</div>
+        <div class="break-info">
+          <div class="break-title">Break taken</div>
+          <div class="break-meta">${fmtTime(b.startedAt)}–${fmtTime(b.endedAt)}${b.actualMinutes!=null?` · ${b.actualMinutes} min`:''}</div>
+        </div>
+      </div>`;
+    }
+    return `<div class="break-card">
+      <div class="break-emoji">☕</div>
+      <div class="break-info">
+        <div class="break-title">${b.duration}-minute break</div>
+        <div class="break-meta">${b.start ? 'Scheduled for ' + fmtTime(b.start) : 'Take it anytime during your shift'}</div>
+      </div>
+      <button class="break-btn start" onclick="startBreak(${b.id})">Start Break</button>
+    </div>`;
+  }).join('');
+
+  // Live timer for an active break
+  const active = myBreaks.find(b => b.status === 'active' && b.startedAt);
+  if (active) {
+    const upd = () => {
+      const t = document.getElementById('brk-timer-' + active.id);
+      if (t) t.textContent = fmtElapsed(active.startedAt);
+    };
+    upd();
+    breakTimer = setInterval(upd, 1000);
+  }
+}
+async function startBreak(id) {
+  await post('/api/break/start', { id, empId });
+  await loadHome();
+}
+async function endBreak(id) {
+  await post('/api/break/end', { id, empId });
+  await loadHome();
 }
 
 // ══ Schedule tab ════════════════════════════════════════════════════════════

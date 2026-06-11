@@ -242,6 +242,39 @@
     <div id="tc-status" style="margin-top:10px"></div>
   </div>
   <div class="card">
+    <h2>☕ Breaks</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">Assign a break to a staff member — they'll get a notification and can start it from their phone.</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Employee</label>
+        <select id="brk-emp"></select>
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="brk-date" />
+      </div>
+      <div class="form-group">
+        <label>Start Time <span class="range-hint">optional</span></label>
+        <input type="time" id="brk-start" />
+      </div>
+      <div class="form-group">
+        <label>Length</label>
+        <select id="brk-duration">
+          <option value="10">10 min</option>
+          <option value="15">15 min</option>
+          <option value="30" selected>30 min</option>
+          <option value="45">45 min</option>
+          <option value="60">60 min</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:0">
+        <label>&nbsp;</label>
+        <button class="btn btn-primary" onclick="addBreak()">Add Break</button>
+      </div>
+    </div>
+    <div id="brk-list" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
     <h2>Today's Punches <button class="btn btn-sm btn-primary" style="float:right" onclick="renderTimeclock()">↻ Refresh</button></h2>
     <div id="tc-punches"></div>
   </div>
@@ -765,7 +798,7 @@ async function saveEmpPassword() {
 function refreshEmpSelects() {
   const opts = poolEmployees().map(e => `<option value="${e.id}">${e.name}</option>`).join('');
   const empty = '<option value="">— No staff in this pool —</option>';
-  ['chem-by','tc-emp','sched-emp'].forEach(id => {
+  ['chem-by','tc-emp','sched-emp','brk-emp'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = opts || empty;
   });
@@ -1041,10 +1074,55 @@ async function renderTimeclock() {
   }).join('') : `<p class="empty">No shifts today yet.</p>`;
   document.getElementById('tc-flags').innerHTML = flagHtml;
 
+  const activeBreakIds = new Set((DB.breaks||[]).filter(b=>inPool(b)&&b.status==='active').map(b=>String(b.empId)));
   const onsite = todayP.filter(p=>!p.out);
   document.getElementById('tc-onsite').innerHTML = onsite.length ?
-    onsite.map(p=>`<div class="clock-status" style="margin:6px 0"><span class="dot dot-in"></span> <strong>${p.empName}</strong> — in since ${fmtTime(p.in)}</div>`).join('') :
+    onsite.map(p=>`<div class="clock-status" style="margin:6px 0"><span class="dot dot-in"></span> <strong>${p.empName}</strong> — in since ${fmtTime(p.in)}${activeBreakIds.has(String(p.empId))?' <span class="badge badge-warn">☕ on break</span>':''}</div>`).join('') :
     `<p style="color:var(--muted);font-size:.9rem">No one currently on site.</p>`;
+
+  renderBreaks();
+}
+
+// ── Breaks ──────────────────────────────────────────────────────────────────
+async function addBreak() {
+  const empId = document.getElementById('brk-emp').value;
+  if (!empId) return alert('Select an employee.');
+  const emp = DB.employees.find(e=>String(e.id)===String(empId));
+  await api.post('/api/break', {
+    empId, empName: emp?.name || '?',
+    date: document.getElementById('brk-date').value || today(),
+    start: document.getElementById('brk-start').value || '',
+    duration: parseInt(document.getElementById('brk-duration').value, 10),
+    poolId: Number(activePoolId),
+  });
+  document.getElementById('brk-start').value = '';
+  await refresh();
+  renderBreaks();
+}
+async function deleteBreak(id) {
+  await api.post('/api/break/delete', { id });
+  await refresh();
+  renderBreaks();
+}
+function renderBreaks() {
+  const el = document.getElementById('brk-list');
+  if (!el) return;
+  const todays = (DB.breaks || []).filter(b => inPool(b) && b.date === today())
+    .sort((a,b) => (a.start||'').localeCompare(b.start||''));
+  if (!todays.length) { el.innerHTML = '<p class="empty" style="padding:14px">No breaks scheduled today.</p>'; return; }
+  const statusBadge = b =>
+    b.status==='active'    ? `<span class="badge badge-warn">☕ On break since ${fmtTime(b.startedAt)}</span>` :
+    b.status==='completed' ? `<span class="badge badge-pass">✓ Taken${b.actualMinutes!=null?` · ${b.actualMinutes} min`:''}</span>` :
+                             `<span class="badge" style="background:#e0e7ff;color:#3730a3">Scheduled</span>`;
+  el.innerHTML = `<table><thead><tr><th>Employee</th><th>When</th><th>Length</th><th>Status</th><th></th></tr></thead><tbody>${
+    todays.map(b => `<tr>
+      <td><strong>${b.empName}</strong></td>
+      <td>${b.start ? fmtTime(b.start) : '<span style="color:var(--muted)">Anytime</span>'}</td>
+      <td>${b.duration} min</td>
+      <td>${statusBadge(b)}</td>
+      <td><button class="btn btn-danger" onclick="deleteBreak(${b.id})">✕</button></td>
+    </tr>`).join('')
+  }</tbody></table>`;
 }
 
 // ── Board ──────────────────────────────────────────────────────────────────
@@ -1190,6 +1268,7 @@ async function exportCSV() {
   document.getElementById('chem-date').value = today();
   document.getElementById('chem-time').value = nowTime();
   document.getElementById('sched-date').value = today();
+  document.getElementById('brk-date').value = today();
   await refresh();
   renderChemicals();
   buildQR();
