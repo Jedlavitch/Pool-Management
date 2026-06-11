@@ -55,7 +55,7 @@ def load_data():
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE) as f:
             return json.load(f)
-    return {'employees': [], 'chemicals': [], 'shifts': [], 'punches': [], 'announcements': [], 'resources': [], 'pool_status': 'open', 'shift_requests': []}
+    return {'employees': [], 'chemicals': [], 'shifts': [], 'punches': [], 'announcements': [], 'resources': [], 'pool_status': 'open', 'shift_requests': [], 'notifications': [], 'shift_confirmations': {}}
 
 def save_data(data):
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
@@ -108,6 +108,10 @@ class Handler(BaseHTTPRequestHandler):
             serve_file(self, 'worker.html')
         elif p in ('/print-qr', '/print-qr.html'):
             serve_file(self, 'print-qr.html')
+        elif p == '/manifest.json':
+            serve_file(self, 'manifest.json', 'application/manifest+json')
+        elif p == '/sw.js':
+            serve_file(self, 'sw.js', 'application/javascript')
         elif p == '/api/data':
             d = load_data()
             out = dict(d)
@@ -196,6 +200,34 @@ class Handler(BaseHTTPRequestHandler):
         elif p == '/api/shift':
             body['id'] = ts()
             data['shifts'].append(body)
+            # Create notification for the scheduled employee
+            emp_id = str(body.get('empId', ''))
+            shift_date = body.get('date', '')
+            shift_start = body.get('start', '')
+            shift_end = body.get('end', '')
+            shift_role = body.get('role', '')
+            if emp_id:
+                def _fmt(t):
+                    if not t: return ''
+                    try:
+                        h, m = int(t[:2]), int(t[3:5])
+                        return f"{h%12 or 12}:{m:02d} {'AM' if h<12 else 'PM'}"
+                    except Exception:
+                        return t
+                try:
+                    from datetime import datetime as _dt
+                    date_lbl = _dt.strptime(shift_date, '%Y-%m-%d').strftime('%a %b %-d')
+                except Exception:
+                    date_lbl = shift_date
+                notif = {
+                    'id': ts() + 1,
+                    'empId': emp_id,
+                    'title': '📅 New Shift Added',
+                    'message': f"You've been scheduled: {date_lbl}, {_fmt(shift_start)} – {_fmt(shift_end)} ({shift_role})",
+                    'read': False,
+                    'ts': datetime.now().strftime('%Y-%m-%d %H:%M')
+                }
+                data.setdefault('notifications', []).insert(0, notif)
             save_data(data)
             self.send_json({'ok': True, 'shift': body})
 
@@ -303,7 +335,32 @@ class Handler(BaseHTTPRequestHandler):
             req_id = body.get('id')
             req = next((r for r in data.get('shift_requests', []) if r['id'] == req_id), None)
             if req:
-                req['status'] = body.get('status', req['status'])
+                new_status = body.get('status', req['status'])
+                req['status'] = new_status
+                # Notify the employee when a request is approved or denied
+                emp_id = str(req.get('empId', ''))
+                if emp_id and new_status in ('approved', 'denied'):
+                    req_type = req.get('type', 'shift')
+                    req_date = req.get('date', '')
+                    try:
+                        date_lbl = datetime.strptime(req_date, '%Y-%m-%d').strftime('%a %b %-d')
+                    except Exception:
+                        date_lbl = req_date
+                    if new_status == 'approved':
+                        title = '✅ Shift Request Approved' if req_type == 'shift' else '✅ Day Off Approved'
+                        msg   = f"Your shift request for {date_lbl} has been approved." if req_type == 'shift' else f"Your day off request for {date_lbl} was approved."
+                    else:
+                        title = '❌ Shift Request Denied' if req_type == 'shift' else '❌ Day Off Denied'
+                        msg   = f"Your shift request for {date_lbl} was not approved." if req_type == 'shift' else f"Your day off request for {date_lbl} was not approved."
+                    notif = {
+                        'id': int(datetime.now().timestamp() * 1000) + 2,
+                        'empId': emp_id,
+                        'title': title,
+                        'message': msg,
+                        'read': False,
+                        'ts': datetime.now().strftime('%Y-%m-%d %H:%M')
+                    }
+                    data.setdefault('notifications', []).insert(0, notif)
                 save_data(data)
                 self.send_json({'ok': True})
             else:
@@ -311,6 +368,27 @@ class Handler(BaseHTTPRequestHandler):
 
         elif p == '/api/shift-request/delete':
             data['shift_requests'] = [r for r in data.get('shift_requests', []) if r['id'] != body['id']]
+            save_data(data)
+            self.send_json({'ok': True})
+
+        elif p == '/api/notification/read':
+            emp_id = str(body.get('empId', ''))
+            for n in data.get('notifications', []):
+                if str(n.get('empId', '')) == emp_id:
+                    n['read'] = True
+            save_data(data)
+            self.send_json({'ok': True})
+
+        elif p == '/api/shift/confirm':
+            emp_id = str(body.get('empId', ''))
+            shift_id = body.get('shiftId')
+            note = body.get('note', '')
+            key = f"{emp_id}_{shift_id}"
+            data.setdefault('shift_confirmations', {})[key] = {
+                'confirmed': True,
+                'ts': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                'note': note
+            }
             save_data(data)
             self.send_json({'ok': True})
 
