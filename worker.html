@@ -52,21 +52,23 @@ header{
   position:sticky;top:0;z-index:60;
   box-shadow:0 2px 8px rgba(0,0,0,.18);
 }
-.hdr-left{display:flex;flex-direction:column;gap:1px;}
-.hdr-title{font-size:1rem;font-weight:800;letter-spacing:.01em;}
-.hdr-sub{font-size:.65rem;opacity:.6;margin-top:1px;}
-.hdr-right{display:flex;gap:5px;align-items:center;}
+.hdr-left{display:flex;flex-direction:column;gap:1px;min-width:0;}
+.hdr-title{font-size:1.2rem;font-weight:800;letter-spacing:-0.02em;line-height:1.1;}
+.hdr-sub{font-size:.72rem;opacity:.72;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hdr-right{display:flex;gap:6px;align-items:center;flex-shrink:0;}
 .hdr-btn{
-  position:relative;background:rgba(255,255,255,.13);border:none;
-  border-radius:9px;padding:7px 9px;font-size:1.05rem;cursor:pointer;color:#fff;
-  line-height:1;transition:background .15s;
+  position:relative;background:rgba(255,255,255,.14);border:none;
+  border-radius:10px;padding:8px 10px;font-size:1.1rem;cursor:pointer;color:#fff;
+  line-height:1;transition:background .15s,transform .1s;
 }
-.hdr-btn:active{background:rgba(255,255,255,.28);}
-.notif-dot{
-  position:absolute;top:4px;right:4px;
-  width:8px;height:8px;border-radius:50%;
-  background:#f85149;border:1.5px solid var(--blue-dk);
-  display:none;
+.hdr-btn:active{background:rgba(255,255,255,.3);transform:scale(.94);}
+.hdr-btn.has-unread{background:rgba(248,81,73,.22);animation:bellpulse 2s ease-in-out infinite;}
+@keyframes bellpulse{0%,100%{box-shadow:0 0 0 0 rgba(248,81,73,.5);}50%{box-shadow:0 0 0 5px rgba(248,81,73,0);}}
+.notif-badge{
+  position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;padding:0 5px;
+  border-radius:10px;background:#f5333f;color:#fff;
+  font-size:.7rem;font-weight:800;line-height:19px;text-align:center;
+  border:2px solid var(--blue-dk);display:none;
 }
 
 /* ── Screens ───────────────────────────────────────────────────────────── */
@@ -83,13 +85,28 @@ header{
 }
 .tab-bar.visible{display:flex;}
 .tab-btn{
-  flex:1;padding:9px 2px 7px;border:none;background:transparent;
-  font-size:.58rem;font-weight:800;color:var(--muted);cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;gap:2px;
-  text-transform:uppercase;letter-spacing:.05em;transition:color .15s;
+  flex:1;padding:8px 2px 6px;border:none;background:transparent;
+  font-size:.6rem;font-weight:800;color:var(--muted);cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  text-transform:uppercase;letter-spacing:.04em;transition:color .15s;
+  position:relative;
 }
 .tab-btn.active{color:var(--blue);}
-.tab-icon{font-size:1.25rem;line-height:1;}
+.tab-btn.active::before{
+  content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:36px;height:3px;border-radius:0 0 3px 3px;background:var(--blue);
+}
+.tab-icon{
+  font-size:1.2rem;line-height:1;width:42px;height:30px;
+  display:flex;align-items:center;justify-content:center;border-radius:14px;
+  transition:background .15s;position:relative;
+}
+.tab-btn.active .tab-icon{background:var(--blue-lt);}
+.tab-badge{
+  position:absolute;top:-3px;right:2px;min-width:16px;height:16px;padding:0 4px;
+  border-radius:8px;background:#f5333f;color:#fff;font-size:.6rem;font-weight:800;
+  line-height:16px;text-align:center;border:1.5px solid var(--card);display:none;
+}
 
 /* ── Section label ─────────────────────────────────────────────────────── */
 .lbl{
@@ -139,6 +156,42 @@ header{
   background:none;color:var(--blue);font-size:.8rem;font-weight:700;
   cursor:pointer;border-top:1px solid var(--border);flex-shrink:0;
 }
+
+/* ── Home unread-notification banner ───────────────────────────────────── */
+.home-notif{
+  background:var(--blue-lt);border:1px solid var(--blue);border-radius:var(--r);
+  padding:13px 15px;margin-bottom:12px;cursor:pointer;
+  box-shadow:var(--shadow);transition:transform .1s;
+}
+.home-notif:active{transform:scale(.99);}
+.home-notif-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.home-notif-head .hn-bell{font-size:1.05rem;}
+.home-notif-head .hn-title{font-size:.82rem;font-weight:800;color:var(--blue);flex:1;}
+.home-notif-head .hn-count{
+  background:#f5333f;color:#fff;font-size:.68rem;font-weight:800;
+  border-radius:10px;padding:1px 8px;
+}
+.home-notif-item{padding:6px 0;border-top:1px solid color-mix(in srgb,var(--blue) 22%,transparent);}
+.home-notif-item:first-of-type{border-top:none;}
+.hn-it-title{font-size:.82rem;font-weight:700;color:var(--text);}
+.hn-it-msg{font-size:.76rem;color:var(--muted);line-height:1.4;margin-top:1px;}
+.home-notif-more{font-size:.74rem;font-weight:700;color:var(--blue);margin-top:8px;text-align:right;}
+
+/* ── Real-time toast ───────────────────────────────────────────────────── */
+.toast{
+  position:fixed;top:-120px;left:50%;transform:translateX(-50%);
+  width:min(440px,94vw);z-index:100;
+  background:var(--card);border:1px solid var(--blue);border-left:4px solid var(--blue);
+  border-radius:var(--r);box-shadow:var(--shadow-md);
+  padding:12px 14px;display:flex;align-items:center;gap:11px;cursor:pointer;
+  transition:top .32s cubic-bezier(.2,.8,.2,1);
+}
+.toast.show{top:calc(8px + env(safe-area-inset-top));}
+.toast-bell{font-size:1.3rem;flex-shrink:0;}
+.toast-body{flex:1;min-width:0;}
+.toast-title{font-size:.84rem;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.toast-msg{font-size:.77rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.toast-x{background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;flex-shrink:0;}
 
 /* ── Shift confirm modal ───────────────────────────────────────────────── */
 .modal-backdrop{
@@ -486,16 +539,26 @@ select.form-inp{cursor:pointer;}
 <!-- ── Header ──────────────────────────────────────────────────────────── -->
 <header>
   <div class="hdr-left">
-    <div class="hdr-title">🏊 Maralavitchstaff</div>
-    <div class="hdr-sub" id="hdr-time"></div>
+    <div class="hdr-title" id="hdr-title">Home</div>
+    <div class="hdr-sub" id="hdr-sub"></div>
   </div>
   <div class="hdr-right">
     <button class="hdr-btn" id="notif-btn" onclick="openNotif()" aria-label="Notifications">
-      🔔<span class="notif-dot" id="notif-dot"></span>
+      🔔<span class="notif-badge" id="notif-badge">0</span>
     </button>
     <button class="hdr-btn" id="theme-btn" onclick="toggleTheme()" aria-label="Toggle dark mode">🌙</button>
   </div>
 </header>
+
+<!-- ── Real-time toast ──────────────────────────────────────────────────── -->
+<div class="toast" id="toast" onclick="openNotif();hideToast()">
+  <span class="toast-bell">🔔</span>
+  <div class="toast-body">
+    <div class="toast-title" id="toast-title"></div>
+    <div class="toast-msg" id="toast-msg"></div>
+  </div>
+  <button class="toast-x" onclick="event.stopPropagation();hideToast()">✕</button>
+</div>
 
 <!-- ── Notification panel ─────────────────────────────────────────────── -->
 <div class="notif-backdrop" id="notif-backdrop" onclick="closeNotif()"></div>
@@ -529,7 +592,7 @@ select.form-inp{cursor:pointer;}
     <span class="tab-icon">📋</span>Board
   </button>
   <button class="tab-btn active" id="tab-home" onclick="showTab('home')">
-    <span class="tab-icon">🏠</span>Home
+    <span class="tab-icon">🏠<span class="tab-badge" id="tab-notif-badge">0</span></span>Home
   </button>
   <button class="tab-btn" id="tab-schedule" onclick="showTab('schedule')">
     <span class="tab-icon">📅</span>Schedule
@@ -584,6 +647,7 @@ select.form-inp{cursor:pointer;}
 <div class="screen" id="screen-home">
   <p class="greeting" id="home-greeting"></p>
   <p class="sub-greeting" id="home-date"></p>
+  <div id="home-notif"></div>
   <div id="home-clock"></div>
   <div id="home-flag-banner"></div>
   <div id="home-breaks"></div>
@@ -760,6 +824,7 @@ function setPool(id, name) {
   activePoolId = Number(id);
   activePoolName = name || '';
   localStorage.setItem('pm_worker_pool', String(activePoolId));
+  _knownNotifIds = null;  // don't toast pre-existing notifications after a context switch
   tick();
 }
 async function afterLogin() {
@@ -838,17 +903,28 @@ const ROLE_COLORS = {
 function rc(role) { return ROLE_COLORS[role] || '#2563eb'; }
 function tick() {
   const t = new Date().toLocaleString('en-US',{weekday:'short',hour:'numeric',minute:'2-digit'});
-  document.getElementById('hdr-time').textContent = activePoolName ? `${activePoolName} · ${t}` : t;
+  const sub = document.getElementById('hdr-sub');
+  if (sub) sub.textContent = activePoolName ? `📍 ${activePoolName} · ${t}` : t;
 }
 setInterval(tick, 1000); tick();
 
-// ══ Screen management ═══════════════════════════════════════════════════════
+// ══ Screen management & wayfinding ═══════════════════════════════════════════
 const TAB_SCREENS = ['board','home','schedule','chemicals'];
+const SCREEN_TITLES = {
+  board:'Board', home:'Home', schedule:'My Schedule', chemicals:'Log Chemicals',
+  clockin:'Clock In', clockout:'Clock Out', request:'Request Time', result:'All Set',
+  name:'Sign In', password:'Sign In', pool:'Choose Pool',
+};
+function setHeader(id) {
+  const el = document.getElementById('hdr-title');
+  if (el && SCREEN_TITLES[id] != null) el.textContent = SCREEN_TITLES[id];
+}
 
 function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-'+id).classList.add('active');
   window.scrollTo(0, 0);
+  setHeader(id);
   const tabBar = document.getElementById('tab-bar');
   const isTab = TAB_SCREENS.includes(id);
   tabBar.classList.toggle('visible', isTab);
@@ -885,8 +961,50 @@ function closeNotif() {
 async function markAllRead() {
   if (!empId) return;
   await post('/api/notification/read', {empId});
-  document.getElementById('notif-dot').style.display = 'none';
   await renderNotifications();
+}
+
+// ── Real-time toast ──────────────────────────────────────────────────────────
+let _knownNotifIds = null;   // null until the first render (so we don't toast on load)
+let _toastTimer = null;
+function showToast(n, count) {
+  document.getElementById('toast-title').textContent = (count > 1 ? `${count} new · ` : '') + (n.title || 'Notification');
+  document.getElementById('toast-msg').textContent = n.message || '';
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(hideToast, 6500);
+}
+function hideToast() { document.getElementById('toast').classList.remove('show'); }
+
+function updateNotifBadges(count) {
+  const label = count > 9 ? '9+' : String(count);
+  const hb = document.getElementById('notif-badge');
+  const tb = document.getElementById('tab-notif-badge');
+  const btn = document.getElementById('notif-btn');
+  if (hb) { hb.textContent = label; hb.style.display = count ? 'block' : 'none'; }
+  if (tb) { tb.textContent = label; tb.style.display = count ? 'block' : 'none'; }
+  if (btn) btn.classList.toggle('has-unread', count > 0);
+}
+
+function renderHomeNotif(unread) {
+  const el = document.getElementById('home-notif');
+  if (!el) return;
+  if (!unread.length) { el.innerHTML = ''; return; }
+  const top = unread.slice(0, 2);
+  el.innerHTML = `
+    <div class="home-notif" onclick="openNotif()">
+      <div class="home-notif-head">
+        <span class="hn-bell">🔔</span>
+        <span class="hn-title">New notification${unread.length > 1 ? 's' : ''}</span>
+        <span class="hn-count">${unread.length}</span>
+      </div>
+      ${top.map(n => `<div class="home-notif-item">
+        <div class="hn-it-title">${n.title || 'Notification'}</div>
+        <div class="hn-it-msg">${n.message || ''}</div>
+      </div>`).join('')}
+      <div class="home-notif-more">View ${unread.length > top.length ? `all ${unread.length}` : ''} →</div>
+    </div>`;
 }
 
 // Show a device notification via the service worker (works on Android, where
@@ -913,8 +1031,18 @@ async function renderNotifications() {
     .sort((a,b) => (b.id||0) - (a.id||0));
   const unread = notifs.filter(n => !n.read);
 
-  // Badge dot
-  document.getElementById('notif-dot').style.display = unread.length ? 'block' : 'none';
+  // Count badges (header bell + Home tab) and unread glow
+  updateNotifBadges(unread.length);
+  // Surface unread on the Home screen so they're seen without opening the panel
+  renderHomeNotif(unread);
+
+  // In-app toast when NEW notifications arrive (not on first load)
+  const idSet = new Set(notifs.map(n => n.id));
+  if (_knownNotifIds !== null) {
+    const fresh = unread.filter(n => !_knownNotifIds.has(n.id));
+    if (fresh.length) showToast(fresh[0], fresh.length);
+  }
+  _knownNotifIds = idSet;
 
   // Request browser notification permission on first unread
   try {
@@ -1364,6 +1492,9 @@ function logout() {
   localStorage.removeItem('pm_worker_id');
   localStorage.removeItem('pm_worker_name');
   empId = null; empName = null; isClockedIn = false;
+  activePoolName = ''; _knownNotifIds = null;
+  updateNotifBadges(0);
+  document.getElementById('home-notif').innerHTML = '';
   document.getElementById('tab-bar').classList.remove('visible');
   show('name');
   loadNameList();
