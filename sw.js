@@ -1,4 +1,4 @@
-// Maralavitchstaff Service Worker
+// Mar-A-Lavitch Staff Service Worker
 // Enables PWA install prompts and "Add to Home Screen" on iOS/Android.
 const CACHE = 'maralavitch-v1';
 

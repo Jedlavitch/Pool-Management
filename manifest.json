@@ -1,6 +1,6 @@
 {
-  "name": "Maralavitchstaff",
-  "short_name": "Maralavitch",
+  "name": "Mar-A-Lavitch Staff",
+  "short_name": "M-A-L Staff",
   "description": "Pool staff portal — scheduling, clock in/out, chemicals",
   "start_url": "/maralavitchstaff",
   "display": "standalone",
