@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-import json, os, socket
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import json, os, socket, threading
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 from datetime import datetime
+
+# Serializes writes so concurrent requests can't corrupt or lose each other's
+# updates once the server handles requests on multiple threads.
+_DATA_LOCK = threading.RLock()
 
 PORT = int(os.environ.get('PORT', 8765))
 
@@ -107,8 +111,13 @@ def load_data():
 
 def save_data(data):
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
+    # Write to a temp file then atomically replace, so a concurrent reader never
+    # sees a partially written file (which would make the app appear "offline").
+    with _DATA_LOCK:
+        tmp = DATA_FILE + '.tmp'
+        with open(tmp, 'w') as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, DATA_FILE)
 
 def serve_file(handler, path, mime='text/html; charset=utf-8'):
     base = os.path.dirname(__file__)
@@ -188,6 +197,12 @@ class Handler(BaseHTTPRequestHandler):
             serve_file(self, p)
 
     def do_POST(self):
+        # Hold the data lock across the whole read-modify-write so simultaneous
+        # writes from multiple devices can't overwrite each other.
+        with _DATA_LOCK:
+            self._handle_post()
+
+    def _handle_post(self):
         p = urlparse(self.path).path
         length = int(self.headers.get('Content-Length', 0))
         body = json.loads(self.rfile.read(length)) if length else {}
@@ -651,4 +666,8 @@ if __name__ == '__main__':
     ip = get_local_ip()
     print(f'Pool Manager → http://localhost:{PORT}')
     print(f'Guard QR URL → http://{ip}:{PORT}/quicklog')
-    HTTPServer(('0.0.0.0', PORT), Handler).serve_forever()
+    # Threaded server: handle many devices at once so the app never appears
+    # "offline" just because another request is in flight.
+    server = ThreadingHTTPServer(('0.0.0.0', PORT), Handler)
+    server.daemon_threads = True
+    server.serve_forever()
