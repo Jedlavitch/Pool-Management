@@ -20,12 +20,16 @@ exact same detection pipeline.
 ## The AI bartender
 
 `POST /api/order` uses the Claude API (`claude-opus-4-8`, structured outputs) to turn any
-free-form order into a recipe the pour tracker can follow. It needs:
+free-form order into a recipe the pour tracker can follow. It needs `pip3 install anthropic`
+plus an API key — easiest is a `.env` file next to the server (gitignored):
 
 ```sh
-pip3 install anthropic
-export ANTHROPIC_API_KEY=...   # or any credential source the SDK resolves
+# pour-decisions/.env
+ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+Get a key at console.anthropic.com. The file is re-read on demand — drop it in and the very
+next order uses it, no restart. (`export ANTHROPIC_API_KEY=...` before launching works too.)
 
 Without it the app still works — the 12 built-in classics match locally and the header
 shows "AI offline — classics only".

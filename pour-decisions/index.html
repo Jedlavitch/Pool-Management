@@ -118,6 +118,12 @@
   .cmd-row { display: flex; gap: 8px; }
   .cmd-row input { flex: 1; }
   #micBtn.on { background: rgba(248,81,73,0.15); border-color: rgba(248,81,73,0.5); color: var(--red); }
+  .key-panel {
+    margin-top: 12px; padding: 13px; border: 1px dashed rgba(246,168,33,0.5);
+    border-radius: 10px; background: var(--accent-soft);
+  }
+  .key-msg { font-size: 13px; color: var(--text-dim); margin-bottom: 10px; line-height: 1.55; }
+  .key-msg b { color: var(--text); }
   .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
   .chips button { font-size: 12.5px; padding: 6px 11px; border-radius: 999px; font-weight: 500; color: var(--text-dim); }
   .chips button:hover { color: var(--text); border-color: var(--accent); }
@@ -241,6 +247,15 @@
         <button id="micBtn" title="Toggle voice control">🎙 Voice</button>
         <input type="text" id="cmdInput" placeholder='Try: "make me a margarita"' autocomplete="off">
         <button id="goBtn" class="primary">Go</button>
+      </div>
+      <div class="key-panel" id="keyPanel" style="display:none">
+        <div class="key-msg">🔑 <b>Connect the AI bartender</b> — paste your Anthropic API key
+        (from <b>console.anthropic.com</b>). It's checked, then saved only on this machine —
+        never in the repo. You'll do this once.</div>
+        <div class="cmd-row">
+          <input type="password" id="keyInput" placeholder="sk-ant-…" autocomplete="off">
+          <button id="keySaveBtn" class="primary">Connect</button>
+        </div>
       </div>
       <div class="chips" id="chips"></div>
     </div>
@@ -837,6 +852,15 @@ function normalizeAiRecipe(r) {
 
 async function aiOrder(raw, fallbackMatch) {
   if (aiBusy) return;
+  if (backendAvailable === false) {
+    if (fallbackMatch) {
+      toast(STATIC_COPY_MSG + ' Pouring the closest classic: ' + fallbackMatch.r.name, 8000);
+      startRecipe(fallbackMatch.r);
+    } else {
+      toast(STATIC_COPY_MSG, 8000);
+    }
+    return;
+  }
   aiBusy = true;
   $('idleMsg').style.display = 'none';
   $('recipeBody').style.display = 'none';
@@ -855,7 +879,13 @@ async function aiOrder(raw, fallbackMatch) {
     startRecipe(normalizeAiRecipe(data.recipe));
   } catch (err) {
     setAiState(false);
-    if (fallbackMatch) {
+    if (/ANTHROPIC_API_KEY|api key|\.env/i.test(err.message)) {
+      lastAiOrder = raw;
+      showKeyPanel(true);
+      $('idleMsg').style.display = 'block';
+      toast('🔑 One-time setup: paste your API key below and your order will retry itself.', 6500);
+      try { $('keyInput').focus(); } catch (e) {}
+    } else if (fallbackMatch) {
       toast('AI unreachable — pouring the closest classic: ' + fallbackMatch.r.name, 4500);
       startRecipe(fallbackMatch.r);
     } else {
@@ -867,6 +897,75 @@ async function aiOrder(raw, fallbackMatch) {
     $('thinkingMsg').style.display = 'none';
   }
 }
+
+// ---------- API key setup (one-time, in-app) ----------
+let lastAiOrder = null;
+
+function showKeyPanel(show) { $('keyPanel').style.display = show ? 'block' : 'none'; }
+
+$('aiPill').style.cursor = 'pointer';
+$('aiPill').title = 'Click to connect / change the AI key';
+$('aiPill').onclick = () => {
+  if (backendAvailable === false) { toast(STATIC_COPY_MSG, 8000); return; }
+  showKeyPanel($('keyPanel').style.display === 'none');
+};
+
+$('keySaveBtn').onclick = async () => {
+  const key = $('keyInput').value.trim();
+  if (!key) { toast('Paste your key first.'); return; }
+  $('keySaveBtn').disabled = true;
+  $('keySaveBtn').textContent = 'Checking…';
+  try {
+    const res = await fetch('/api/key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 404 || res.status === 405) throw new Error(STATIC_COPY_MSG);
+    if (!res.ok || !data.ok) throw new Error(data.error || ('the server said no (HTTP ' + res.status + ')'));
+    $('keyInput').value = '';
+    showKeyPanel(false);
+    setAiState(true);
+    toast('🔑 AI bartender connected!');
+    speak('AI bartender online. What are we making?');
+    if (lastAiOrder) {
+      const order = lastAiOrder;
+      lastAiOrder = null;
+      aiOrder(order, localMatch(order.toLowerCase()));
+    }
+  } catch (err) {
+    const msg = (err instanceof TypeError)
+      ? "Can't reach the server from this device — connect once from the Mac instead; every other device picks it up automatically."
+      : err.message;
+    toast(msg, 6500);
+  } finally {
+    $('keySaveBtn').disabled = false;
+    $('keySaveBtn').textContent = 'Connect';
+  }
+};
+$('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('keySaveBtn').click(); });
+
+// on load, ask the server whether a key is already saved — any device that hits a
+// connected server shows ✓ immediately and never nags for the key again. A static
+// copy (GitHub Pages etc.) has no /api at all: say so instead of failing cryptically.
+let backendAvailable = null;
+const STATIC_COPY_MSG = 'This copy is the static build — no AI behind it. On your home Wi-Fi, ' +
+  'open the bar server instead: https://<your-mac-ip>:8792 (camera + AI).';
+(async function refreshAiStatus() {
+  try {
+    const res = await fetch('/api/status');
+    if (!res.ok) throw new Error('no backend');
+    const data = await res.json();
+    backendAvailable = true;
+    if (data.ai_ready) { setAiState(true); showKeyPanel(false); }
+  } catch (e) {
+    backendAvailable = false;
+    $('aiPillText').textContent = 'classics only — AI lives on the bar server';
+    $('aiPill').style.opacity = '0.55';
+    showKeyPanel(false);
+  }
+})();
 
 // ---------- voice ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
