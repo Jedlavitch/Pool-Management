@@ -6,6 +6,18 @@
       "runtimeExecutable": "/usr/bin/python3",
       "runtimeArgs": ["server.py"],
       "port": 8765
+    },
+    {
+      "name": "transit-board",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "4173", "--directory", "/Users/jackedlavitch/Transit Claude"],
+      "port": 4173
+    },
+    {
+      "name": "pour-decisions",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["/Users/jackedlavitch/Claude Madness/pour-decisions/server.py"],
+      "port": 8791
     }
   ]
 }

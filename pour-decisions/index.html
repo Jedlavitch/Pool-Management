@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e1116">
+<title>Pour Decisions 🍸</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍸</text></svg>">
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161c24;
+    --panel-2: #1d242f;
+    --border: #2a3341;
+    --text: #e8edf4;
+    --text-dim: #93a1b3;
+    --accent: #f6a821;
+    --accent-soft: rgba(246, 168, 33, 0.14);
+    --green: #3fb950;
+    --green-soft: rgba(63, 185, 80, 0.15);
+    --red: #f85149;
+    --blue: #58a6ff;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Helvetica Neue", Helvetica, -apple-system, system-ui, Arial, sans-serif;
+    min-height: 100vh;
+    padding: 18px;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+  header .sub { color: var(--text-dim); font-size: 14px; }
+  .pill {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 999px; padding: 7px 14px; font-size: 13px; color: var(--text-dim);
+  }
+  .pill .dot { width: 9px; height: 9px; border-radius: 50%; background: #55606e; }
+  .pill.listening .dot { background: var(--red); animation: pulse 1.2s infinite; }
+  .pill.listening { color: var(--text); border-color: rgba(248, 81, 73, 0.5); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }
+
+  .layout {
+    display: grid; grid-template-columns: minmax(420px, 1.15fr) 1fr; gap: 16px;
+    max-width: 1400px; margin: 0 auto;
+  }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+  }
+  .card h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--text-dim); margin-bottom: 12px; font-weight: 600;
+  }
+
+  /* ---- camera ---- */
+  .view-wrap { position: relative; border-radius: 10px; overflow: hidden; background: #000; }
+  #view { display: block; width: 100%; aspect-ratio: 4 / 3; }
+  #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .stop-flash {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(248, 81, 73, 0.28); backdrop-filter: blur(1px);
+  }
+  .stop-flash.show { display: flex; animation: stopPulse 0.45s ease-in-out infinite alternate; }
+  .stop-flash span {
+    font-size: 64px; font-weight: 800; letter-spacing: 4px; color: #fff;
+    text-shadow: 0 4px 24px rgba(0,0,0,0.6);
+  }
+  @keyframes stopPulse { from { background: rgba(248,81,73,0.20) } to { background: rgba(248,81,73,0.40) } }
+
+  .cam-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+  .cam-hint { margin-top: 10px; font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+
+  button {
+    font-family: inherit; font-size: 14px; font-weight: 600;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 9px;
+    padding: 9px 14px; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+    touch-action: manipulation;
+  }
+  @media (pointer: coarse) {
+    button { padding: 12px 17px; }
+    select, input[type="text"] { padding: 12px 14px; }
+  }
+  button:hover { background: #242d3a; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #1a1205; }
+  button.primary:hover { background: #ffbf47; }
+  button.good { background: var(--green-soft); border-color: rgba(63,185,80,0.45); color: var(--green); }
+  button.danger { background: rgba(248,81,73,0.12); border-color: rgba(248,81,73,0.4); color: var(--red); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  select, input[type="text"] {
+    font-family: inherit; font-size: 16px; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px; outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+
+  .level-chip {
+    margin-left: auto; font-size: 13px; color: var(--text-dim);
+    background: var(--panel-2); border: 1px solid var(--border);
+    padding: 7px 12px; border-radius: 999px; font-variant-numeric: tabular-nums;
+  }
+  .level-chip b { color: var(--text); }
+
+  /* ---- command ---- */
+  .cmd-row { display: flex; gap: 8px; }
+  .cmd-row input { flex: 1; }
+  #micBtn.on { background: rgba(248,81,73,0.15); border-color: rgba(248,81,73,0.5); color: var(--red); }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+  .chips button { font-size: 12.5px; padding: 6px 11px; border-radius: 999px; font-weight: 500; color: var(--text-dim); }
+  .chips button:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ---- recipe ---- */
+  #recipeCard .idle { color: var(--text-dim); font-size: 14.5px; line-height: 1.7; padding: 8px 0 4px; }
+  #recipeCard .idle .big { font-size: 19px; color: var(--text); font-weight: 600; margin-bottom: 6px; }
+  .r-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+  .r-head h3 { font-size: 24px; font-weight: 700; }
+  .r-head .meta { color: var(--text-dim); font-size: 13px; }
+  .r-tagline { color: var(--text-dim); font-size: 13.5px; margin-bottom: 14px; }
+  .steps { display: flex; flex-direction: column; gap: 8px; }
+  .step {
+    border: 1px solid var(--border); border-radius: 11px; padding: 11px 13px;
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--panel-2); opacity: 0.55; transition: opacity 0.2s, border-color 0.2s;
+  }
+  .step .num {
+    flex: none; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--panel); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12.5px; font-weight: 700; color: var(--text-dim);
+  }
+  .step .body { flex: 1; font-size: 14.5px; line-height: 1.45; }
+  .step .body .oz { color: var(--accent); font-weight: 700; }
+  .step.done { opacity: 0.8; }
+  .step.done .num { background: var(--green-soft); border-color: rgba(63,185,80,0.4); color: var(--green); }
+  .step.done .body { text-decoration: line-through; color: var(--text-dim); }
+  .step.active { opacity: 1; border-color: var(--accent); background: var(--accent-soft); }
+  .step.active .num { background: var(--accent); border-color: var(--accent); color: #1a1205; }
+
+  .hud { margin-top: 10px; width: 100%; }
+  .hud .nums {
+    display: flex; align-items: baseline; gap: 8px;
+    font-variant-numeric: tabular-nums; margin-bottom: 8px;
+  }
+  .hud .cur { font-size: 40px; font-weight: 800; color: var(--accent); line-height: 1; }
+  .hud .tgt { font-size: 18px; color: var(--text-dim); font-weight: 600; }
+  .hud .state { margin-left: auto; font-size: 12.5px; color: var(--text-dim); }
+  .bar { height: 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--border); overflow: hidden; }
+  .bar .fill { height: 100%; width: 0%; background: linear-gradient(90deg, #c97f0a, var(--accent)); border-radius: 999px; transition: width 0.12s linear; }
+  .bar .fill.over { background: linear-gradient(90deg, #c93a0a, var(--red)); }
+  .step-actions { margin-top: 10px; display: flex; gap: 8px; }
+
+  .done-banner {
+    text-align: center; padding: 26px 12px 18px; display: none;
+  }
+  .done-banner.show { display: block; }
+  .done-banner .glass { font-size: 54px; }
+  .done-banner h3 { font-size: 24px; margin: 8px 0 4px; }
+  .done-banner p { color: var(--text-dim); font-size: 14px; }
+
+  /* ---- sim ---- */
+  .sim-controls { display: none; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  .sim-controls.show { display: flex; }
+  .sim-controls .tag {
+    font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--blue);
+    border: 1px solid rgba(88,166,255,0.4); background: rgba(88,166,255,0.1);
+    padding: 4px 9px; border-radius: 6px;
+  }
+
+  /* ---- toast ---- */
+  #toasts { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+  .toast {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    padding: 10px 16px; border-radius: 10px; font-size: 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5); animation: rise 0.25s ease;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍸 Pour Decisions</h1>
+  <div class="sub">Say it. See it. Pour it — the camera counts the ounces.</div>
+  <div class="pill" id="aiPill">✨ <span id="aiPillText">AI bartender</span></div>
+  <div class="pill" id="micPill" style="margin-left:0"><span class="dot"></span><span id="micPillText">mic off</span></div>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT: camera -->
+  <div class="card">
+    <h2>Pour Station</h2>
+    <div class="view-wrap">
+      <canvas id="view" width="640" height="480"></canvas>
+      <canvas id="overlay" width="640" height="480"></canvas>
+      <div class="stop-flash" id="stopFlash"><span>STOP</span></div>
+    </div>
+    <div class="cam-controls">
+      <button id="camBtn" class="primary">Start camera</button>
+      <button id="simBtn">Sim mode</button>
+      <button id="calBtn">Calibrate empty vessel</button>
+      <select id="glassSel" title="Vessel the camera is watching">
+        <option value="16" selected>Shaker / pint glass (16 oz)</option>
+        <option value="18">Mixing glass (18 oz)</option>
+        <option value="12">Highball (12 oz)</option>
+        <option value="10">Rocks (10 oz)</option>
+      </select>
+      <div class="level-chip" id="levelChip">level: <b>—</b></div>
+    </div>
+    <div class="sim-controls" id="simControls">
+      <span class="tag">SIM</span>
+      <button id="pourBtn" class="good">▶ Start pour</button>
+      <button id="simResetBtn">Empty glass</button>
+      <span style="font-size:12.5px;color:var(--text-dim)">Virtual glass pours ~0.75 oz/sec — pour stops itself when the app calls it.</span>
+    </div>
+    <div class="cam-hint">
+      Line the vessel's <b>inside bottom and rim</b> up with the amber guides. Free-pour into a
+      <b>clear</b> glass in frame — metal tins are invisible to cameras 😉. Colored liquid, steady
+      camera, and a plain backdrop make the reading much better.
+    </div>
+  </div>
+
+  <!-- RIGHT: command + recipe -->
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div class="card">
+      <h2>Bartender Console</h2>
+      <div class="cmd-row">
+        <button id="micBtn" title="Toggle voice control">🎙 Voice</button>
+        <input type="text" id="cmdInput" placeholder='Try: "make me a margarita"' autocomplete="off">
+        <button id="goBtn" class="primary">Go</button>
+      </div>
+      <div class="chips" id="chips"></div>
+    </div>
+
+    <div class="card" id="recipeCard">
+      <h2>Recipe</h2>
+      <div class="idle" id="idleMsg">
+        <div class="big">Waiting on an order.</div>
+        Tap 🎙 and say <i>“make me a margarita”</i> — or invent one:
+        <i>“something smoky with mezcal and grapefruit.”</i><br>
+        Pour steps advance automatically when the camera sees the right amount in the glass.
+      </div>
+      <div class="idle" id="thinkingMsg" style="display:none">
+        <div class="big">🧠 Inventing “<span id="thinkingOrder"></span>”…</div>
+        The AI bartender is thinking. Give it a few seconds.
+      </div>
+      <div id="recipeBody" style="display:none">
+        <div class="r-head"><h3 id="rName"></h3><span class="meta" id="rMeta"></span></div>
+        <div class="r-tagline" id="rTagline"></div>
+        <div class="steps" id="stepsEl"></div>
+        <div class="done-banner" id="doneBanner">
+          <div class="glass">🍸</div>
+          <h3>Cheers — drink's up!</h3>
+          <p id="doneMsg"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<video id="camVideo" autoplay playsinline muted style="display:none"></video>
+
+<script>
+/* =========================================================
+   Pour Decisions — voice-driven cocktail coach with
+   camera-based pour tracking.
+   ========================================================= */
+
+// ---------- recipes ----------
+const RECIPES = [
+  { id: 'margarita', name: 'Margarita', aliases: ['marg'], glass: 'rocks, salted rim', tagline: 'The people’s tequila sour.', steps: [
+    { type: 'pour', label: 'Tequila blanco', oz: 2 },
+    { type: 'pour', label: 'Fresh lime juice', oz: 1 },
+    { type: 'pour', label: 'Triple sec', oz: 0.75 },
+    { type: 'action', label: 'Add ice to the shaker and shake hard for 12 seconds' },
+    { type: 'action', label: 'Strain into a salt-rimmed rocks glass over fresh ice' },
+    { type: 'garnish', label: 'Lime wheel' },
+  ]},
+  { id: 'daiquiri', name: 'Daiquiri', aliases: [], glass: 'coupe', tagline: 'Rum, lime, sugar. Perfection has three parts.', steps: [
+    { type: 'pour', label: 'White rum', oz: 2 },
+    { type: 'pour', label: 'Fresh lime juice', oz: 1 },
+    { type: 'pour', label: 'Simple syrup', oz: 0.75 },
+    { type: 'action', label: 'Add ice and shake hard for 12 seconds' },
+    { type: 'action', label: 'Double-strain into a chilled coupe' },
+    { type: 'garnish', label: 'Lime wheel' },
+  ]},
+  { id: 'old-fashioned', name: 'Old Fashioned', aliases: ['old fashion'], glass: 'rocks, big cube', tagline: 'The original cocktail. Don’t rush it.', steps: [
+    { type: 'pour', label: 'Bourbon or rye', oz: 2 },
+    { type: 'pour', label: 'Simple syrup', oz: 0.25 },
+    { type: 'action', label: 'Add 3 dashes of Angostura bitters' },
+    { type: 'action', label: 'Add ice and stir for 20 seconds' },
+    { type: 'action', label: 'Strain over one big cube in a rocks glass' },
+    { type: 'garnish', label: 'Express an orange peel over the top, then drop it in' },
+  ]},
+  { id: 'negroni', name: 'Negroni', aliases: [], glass: 'rocks, big cube', tagline: 'Equal parts, zero apologies.', steps: [
+    { type: 'pour', label: 'Gin', oz: 1 },
+    { type: 'pour', label: 'Campari', oz: 1 },
+    { type: 'pour', label: 'Sweet vermouth', oz: 1 },
+    { type: 'action', label: 'Add ice and stir for 20 seconds' },
+    { type: 'action', label: 'Strain over a big cube' },
+    { type: 'garnish', label: 'Orange peel' },
+  ]},
+  { id: 'whiskey-sour', name: 'Whiskey Sour', aliases: ['whisky sour'], glass: 'rocks', tagline: 'Bourbon with its citrus armor on.', steps: [
+    { type: 'pour', label: 'Bourbon', oz: 2 },
+    { type: 'pour', label: 'Fresh lemon juice', oz: 0.75 },
+    { type: 'pour', label: 'Simple syrup', oz: 0.75 },
+    { type: 'action', label: 'Optional: add an egg white and dry-shake (no ice) 10 seconds' },
+    { type: 'action', label: 'Add ice, shake 12 seconds, strain over fresh ice' },
+    { type: 'garnish', label: 'Cherry + orange slice' },
+  ]},
+  { id: 'mojito', name: 'Mojito', aliases: [], glass: 'highball', tagline: 'Summer in a glass, mint required.', steps: [
+    { type: 'pour', label: 'Simple syrup', oz: 0.75 },
+    { type: 'action', label: 'Add 8 mint leaves and gently muddle — press, don’t shred' },
+    { type: 'pour', label: 'Fresh lime juice', oz: 1 },
+    { type: 'pour', label: 'White rum', oz: 2 },
+    { type: 'action', label: 'Fill with crushed ice and swizzle' },
+    { type: 'action', label: 'Top with a splash of soda water' },
+    { type: 'garnish', label: 'Fat mint sprig — slap it first' },
+  ]},
+  { id: 'gin-tonic', name: 'Gin & Tonic', aliases: ['gin and tonic', 'g and t', 'g&t', 'gt'], glass: 'highball', tagline: 'Two ingredients, no excuses for a bad one.', steps: [
+    { type: 'pour', label: 'Gin', oz: 2 },
+    { type: 'action', label: 'Fill the glass with ice' },
+    { type: 'pour', label: 'Tonic water', oz: 4 },
+    { type: 'action', label: 'One gentle stir — keep the bubbles' },
+    { type: 'garnish', label: 'Lime wedge' },
+  ]},
+  { id: 'moscow-mule', name: 'Moscow Mule', aliases: ['mule'], glass: 'copper mug', tagline: 'Ginger heat, copper cold.', steps: [
+    { type: 'pour', label: 'Vodka', oz: 2 },
+    { type: 'pour', label: 'Fresh lime juice', oz: 0.5 },
+    { type: 'action', label: 'Fill with ice' },
+    { type: 'pour', label: 'Ginger beer', oz: 4 },
+    { type: 'garnish', label: 'Lime wedge + mint' },
+  ]},
+  { id: 'manhattan', name: 'Manhattan', aliases: [], glass: 'coupe', tagline: 'Rye’s formal wear.', steps: [
+    { type: 'pour', label: 'Rye whiskey', oz: 2 },
+    { type: 'pour', label: 'Sweet vermouth', oz: 1 },
+    { type: 'action', label: 'Add 2 dashes of Angostura bitters' },
+    { type: 'action', label: 'Add ice and stir for 25 seconds' },
+    { type: 'action', label: 'Strain into a chilled coupe' },
+    { type: 'garnish', label: 'Brandied cherry' },
+  ]},
+  { id: 'cosmopolitan', name: 'Cosmopolitan', aliases: ['cosmo'], glass: 'coupe', tagline: 'Pink, tart, and it never left.', steps: [
+    { type: 'pour', label: 'Citrus vodka', oz: 1.5 },
+    { type: 'pour', label: 'Cointreau', oz: 0.75 },
+    { type: 'pour', label: 'Cranberry juice', oz: 0.75 },
+    { type: 'pour', label: 'Fresh lime juice', oz: 0.25 },
+    { type: 'action', label: 'Add ice, shake 12 seconds, double-strain into a chilled coupe' },
+    { type: 'garnish', label: 'Orange twist — flame it if you’re feeling fancy' },
+  ]},
+  { id: 'espresso-martini', name: 'Espresso Martini', aliases: ['espresso'], glass: 'coupe', tagline: 'Wakes you up, then talks you into another.', steps: [
+    { type: 'pour', label: 'Vodka', oz: 1.5 },
+    { type: 'pour', label: 'Fresh espresso', oz: 1 },
+    { type: 'pour', label: 'Coffee liqueur', oz: 0.5 },
+    { type: 'pour', label: 'Simple syrup', oz: 0.25 },
+    { type: 'action', label: 'Add ice and shake like you mean it — 15 seconds for the foam' },
+    { type: 'action', label: 'Double-strain into a chilled coupe' },
+    { type: 'garnish', label: '3 coffee beans' },
+  ]},
+  { id: 'paloma', name: 'Paloma', aliases: [], glass: 'highball, salted rim', tagline: 'What margaritas drink on vacation.', steps: [
+    { type: 'pour', label: 'Tequila blanco', oz: 2 },
+    { type: 'pour', label: 'Fresh lime juice', oz: 0.5 },
+    { type: 'action', label: 'Add a pinch of salt and fill with ice' },
+    { type: 'pour', label: 'Grapefruit soda', oz: 3 },
+    { type: 'garnish', label: 'Grapefruit wedge' },
+  ]},
+  { id: 'ramos-gin-fizz', name: 'Ramos Gin Fizz', aliases: ['ramos', 'gin fizz'], glass: 'collins', tagline: 'The 12-minute arm workout you can drink.', steps: [
+    { type: 'pour', label: 'Gin', oz: 2 },
+    { type: 'pour', label: 'Fresh lemon juice', oz: 0.5 },
+    { type: 'pour', label: 'Fresh lime juice', oz: 0.5 },
+    { type: 'pour', label: 'Simple syrup', oz: 1 },
+    { type: 'pour', label: 'Heavy cream', oz: 1 },
+    { type: 'action', label: 'Add 1 egg white and 3 drops of orange flower water' },
+    { type: 'action', label: 'Dry shake (no ice) for 30 seconds to build the foam' },
+    { type: 'action', label: 'Add ice and shake hard for a full minute — earn it' },
+    { type: 'action', label: 'Strain into a chilled collins glass, no ice; rest 1 minute' },
+    { type: 'action', label: 'Slowly pour soda down the middle to raise the soufflé top' },
+    { type: 'garnish', label: 'Orange twist, if anything' },
+  ]},
+  { id: 'mai-tai', name: 'Mai Tai', aliases: ['maitai'], glass: 'double rocks, crushed ice', tagline: 'Trader Vic’s masterpiece — accept no juice-bomb impostors.', steps: [
+    { type: 'pour', label: 'Aged Jamaican rum', oz: 2 },
+    { type: 'pour', label: 'Fresh lime juice', oz: 0.75 },
+    { type: 'pour', label: 'Orange curaçao', oz: 0.5 },
+    { type: 'pour', label: 'Orgeat', oz: 0.5 },
+    { type: 'action', label: 'Add crushed ice and shake briefly' },
+    { type: 'action', label: 'Dump — unstrained — into a double rocks glass' },
+    { type: 'pour', label: 'Float of dark rum on top', oz: 0.5 },
+    { type: 'garnish', label: 'Spent lime shell + big mint sprig' },
+  ]},
+  { id: 'zombie', name: 'Zombie', aliases: [], glass: 'tiki mug or tall collins', tagline: 'Don the Beachcomber’s two-per-customer limit exists for a reason.', steps: [
+    { type: 'pour', label: 'Gold Puerto Rican rum', oz: 1.5 },
+    { type: 'pour', label: 'Aged Jamaican rum', oz: 1.5 },
+    { type: 'pour', label: 'Fresh lime juice', oz: 0.75 },
+    { type: 'pour', label: 'Falernum', oz: 0.5 },
+    { type: 'pour', label: 'Fresh grapefruit juice', oz: 0.5 },
+    { type: 'pour', label: 'Cinnamon syrup', oz: 0.25 },
+    { type: 'pour', label: 'Grenadine', oz: 0.25 },
+    { type: 'action', label: 'Add a dash of absinthe and 1 dash of Angostura bitters' },
+    { type: 'action', label: 'Flash-blend (or shake) with crushed ice and pour it all in' },
+    { type: 'pour', label: 'Float of 151-proof rum', oz: 1 },
+    { type: 'garnish', label: 'Mint sprig — flame the float only if insurance is paid up' },
+  ]},
+];
+
+// ---------- constants / state ----------
+const W = 640, H = 480;
+// analysis region (the amber guide box), in view coordinates
+const REGION = { x: Math.round(W * 0.33), y: Math.round(H * 0.16), w: Math.round(W * 0.34), h: Math.round(H * 0.72) };
+const POUR_RATE = 0.75;          // sim oz per second
+const DIFF_THRESHOLD = 30;       // per-row color distance = "liquid here"
+const HIT_FRAMES = 5;            // consecutive frames at target before STOP
+
+const state = {
+  source: null,                  // 'camera' | 'sim'
+  calibrated: false,
+  baseline: null,                // per-row [r,g,b] of empty vessel
+  ozSmooth: 0,                   // smoothed absolute level in oz
+  levelRowSmooth: null,
+  recipe: null,
+  stepIdx: -1,
+  phase: 'idle',                 // idle | settling | watching | hit | waiting
+  settleUntil: 0,
+  startOz: 0,                    // level when pour step began
+  hitCount: 0,
+  listening: false,
+  sim: { oz: 0, pouring: false, lastT: 0 },
+  calCollect: null,              // frames accumulator during calibration
+};
+
+// ---------- dom ----------
+const $ = id => document.getElementById(id);
+const view = $('view'), overlay = $('overlay');
+const vctx = view.getContext('2d', { willReadFrequently: true });
+const octx = overlay.getContext('2d');
+const camVideo = $('camVideo');
+const simCanvas = document.createElement('canvas'); simCanvas.width = W; simCanvas.height = H;
+const sctx = simCanvas.getContext('2d');
+
+// ---------- helpers ----------
+function toast(msg, ms = 3200) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+function capacity() { return parseFloat($('glassSel').value); }
+function fmt(oz) { return (Math.round(oz * 10) / 10).toFixed(1); }
+
+let audioCtx = null;
+function chime(kind = 'good') {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const notes = kind === 'good' ? [880, 1318] : [440, 330];
+    notes.forEach((f, i) => {
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = f; o.type = 'sine';
+      g.gain.setValueAtTime(0.0001, audioCtx.currentTime + i * 0.12);
+      g.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + i * 0.12 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + i * 0.12 + 0.25);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(audioCtx.currentTime + i * 0.12); o.stop(audioCtx.currentTime + i * 0.12 + 0.3);
+    });
+  } catch (e) { /* audio is a nicety */ }
+}
+
+function speak(text) {
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.03; u.pitch = 1.0;
+    const v = speechSynthesis.getVoices().find(v => /en[-_]/.test(v.lang) && /Samantha|Google US|Daniel|Karen/i.test(v.name));
+    if (v) u.voice = v;
+    speechSynthesis.speak(u);
+  } catch (e) { /* tts is a nicety */ }
+}
+
+// ---------- video sources ----------
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'environment' }, audio: false,
+    });
+    camVideo.srcObject = stream;
+    await camVideo.play();
+    state.source = 'camera';
+    state.calibrated = false; state.baseline = null;
+    $('simControls').classList.remove('show');
+    $('camBtn').textContent = 'Camera on ✓';
+    toast('Camera on. Put the empty vessel in the guides and hit Calibrate.');
+  } catch (err) {
+    toast('Camera unavailable (' + err.name + ') — try Sim mode, or open this page in Chrome and allow camera access.', 6000);
+  }
+}
+
+function startSim() {
+  state.source = 'sim';
+  state.sim.oz = 0; state.sim.pouring = false;
+  state.calibrated = false; state.baseline = null;
+  $('simControls').classList.add('show');
+  $('camBtn').textContent = 'Start camera';
+  if (camVideo.srcObject) { camVideo.srcObject.getTracks().forEach(t => t.stop()); camVideo.srcObject = null; }
+  toast('Sim mode: a virtual glass stands in for the camera.');
+  // auto-calibrate on the empty virtual glass after a beat
+  setTimeout(() => beginCalibration(true), 600);
+}
+
+function drawSim(now) {
+  const s = state.sim;
+  if (s.pouring) {
+    // clamp dt so a stalled tab (backgrounded iPad, throttled rAF) can't teleport the liquid
+    const dt = s.lastT ? Math.min((now - s.lastT) / 1000, 0.1) : 0;
+    s.oz = Math.min(capacity(), s.oz + POUR_RATE * dt);
+  }
+  s.lastT = now;
+
+  // backdrop
+  const bg = sctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#232a34'); bg.addColorStop(1, '#12161d');
+  sctx.fillStyle = bg; sctx.fillRect(0, 0, W, H);
+  sctx.fillStyle = '#0d1015'; sctx.fillRect(0, H * 0.86, W, H * 0.14); // bar top
+
+  // glass interior == analysis region inset a touch
+  const gx = REGION.x + 10, gw = REGION.w - 20;
+  const gy = REGION.y + 4, gh = REGION.h - 8;
+
+  // liquid
+  const frac = s.oz / capacity();
+  const lh = gh * frac;
+  if (lh > 0.5) {
+    const ly = gy + gh - lh;
+    const liq = sctx.createLinearGradient(0, ly, 0, gy + gh);
+    liq.addColorStop(0, '#ffc14d'); liq.addColorStop(1, '#b36a00');
+    sctx.fillStyle = liq;
+    sctx.fillRect(gx, ly, gw, lh);
+    sctx.fillStyle = 'rgba(255,255,255,0.35)';
+    sctx.fillRect(gx, ly, gw, 2.5); // meniscus glint
+    if (s.pouring) { // pour stream
+      sctx.strokeStyle = 'rgba(255,193,77,0.8)'; sctx.lineWidth = 5;
+      sctx.beginPath(); sctx.moveTo(gx + gw / 2, 0); sctx.lineTo(gx + gw / 2, ly); sctx.stroke();
+    }
+  }
+  // glass walls
+  sctx.strokeStyle = 'rgba(190,205,225,0.5)'; sctx.lineWidth = 4;
+  sctx.beginPath();
+  sctx.moveTo(gx - 4, gy - 6); sctx.lineTo(gx - 4, gy + gh); sctx.lineTo(gx + gw + 4, gy + gh); sctx.lineTo(gx + gw + 4, gy - 6);
+  sctx.stroke();
+  // subtle sensor noise so detection isn't cheating
+  for (let i = 0; i < 40; i++) {
+    sctx.fillStyle = 'rgba(255,255,255,' + (Math.random() * 0.03) + ')';
+    sctx.fillRect(Math.random() * W, Math.random() * H, 2, 2);
+  }
+  sctx.fillStyle = 'rgba(88,166,255,0.5)'; sctx.font = 'bold 16px Helvetica';
+  sctx.fillText('SIM FEED', 14, 26);
+}
+
+// ---------- calibration ----------
+function beginCalibration(auto = false) {
+  if (!state.source) { toast('Start the camera (or Sim mode) first.'); return; }
+  state.calCollect = { rows: null, frames: 0 };
+  if (!auto) toast('Calibrating — keep the empty vessel still…');
+}
+
+function feedCalibration(rowMeans) {
+  const c = state.calCollect;
+  if (!c.rows) c.rows = rowMeans.map(r => [...r]);
+  else rowMeans.forEach((r, i) => { c.rows[i][0] += r[0]; c.rows[i][1] += r[1]; c.rows[i][2] += r[2]; });
+  c.frames++;
+  if (c.frames >= 12) {
+    state.baseline = c.rows.map(r => [r[0] / c.frames, r[1] / c.frames, r[2] / c.frames]);
+    state.calCollect = null;
+    state.calibrated = true;
+    state.ozSmooth = 0; state.levelRowSmooth = null;
+    $('calBtn').textContent = 'Calibrated ✓';
+    $('calBtn').classList.add('good');
+    chime('good');
+    toast('Calibrated. The camera is now watching the liquid line.');
+  }
+}
+
+// ---------- frame analysis ----------
+function rowMeansFromRegion() {
+  const img = vctx.getImageData(REGION.x, REGION.y, REGION.w, REGION.h);
+  const d = img.data, rw = REGION.w, rh = REGION.h;
+  const x0 = Math.round(rw * 0.22), x1 = Math.round(rw * 0.78); // middle band only
+  const rows = new Array(rh);
+  for (let y = 0; y < rh; y++) {
+    let r = 0, g = 0, b = 0, n = 0;
+    const base = y * rw * 4;
+    for (let x = x0; x < x1; x += 3) {
+      const i = base + x * 4;
+      r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+    }
+    rows[y] = [r / n, g / n, b / n];
+  }
+  return rows;
+}
+
+function analyze() {
+  const rows = rowMeansFromRegion();
+  if (state.calCollect) { feedCalibration(rows); return; }
+  if (!state.calibrated) return;
+
+  const N = rows.length;
+  const changed = new Array(N);
+  for (let y = 0; y < N; y++) {
+    const dr = rows[y][0] - state.baseline[y][0];
+    const dg = rows[y][1] - state.baseline[y][1];
+    const db = rows[y][2] - state.baseline[y][2];
+    changed[y] = Math.sqrt(dr * dr + dg * dg + db * db) > DIFF_THRESHOLD;
+  }
+  // walk up from the bottom; tolerate small gaps (glare bands etc.)
+  let level = N, miss = 0;
+  for (let y = N - 1; y >= 0; y--) {
+    if (changed[y]) { level = y; miss = 0; }
+    else if (level < N && ++miss > 10) break;
+  }
+  const fillRows = level >= N ? 0 : (N - level);
+  const oz = (fillRows / N) * capacity();
+  state.ozSmooth += 0.35 * (oz - state.ozSmooth);
+  state.levelRowSmooth = state.levelRowSmooth === null ? level : state.levelRowSmooth + 0.35 * (level - state.levelRowSmooth);
+
+  $('levelChip').innerHTML = 'level: <b>' + fmt(state.ozSmooth) + ' oz</b>';
+  trackPour();
+}
+
+// ---------- pour step engine ----------
+function currentStep() { return state.recipe ? state.recipe.steps[state.stepIdx] : null; }
+
+function trackPour() {
+  const step = currentStep();
+  if (!step || step.type !== 'pour') return;
+
+  if (state.phase === 'settling') {
+    if (performance.now() >= state.settleUntil) {
+      state.startOz = state.ozSmooth;
+      state.phase = 'watching';
+      setHudState('watching the glass — pour away');
+    }
+    return;
+  }
+  if (state.phase !== 'watching') return;
+
+  const poured = Math.max(0, state.ozSmooth - state.startOz);
+  updateHud(poured, step.oz);
+
+  if (poured >= step.oz - 0.06) {
+    if (++state.hitCount >= HIT_FRAMES) {
+      state.phase = 'hit'; state.hitCount = 0;
+      state.sim.pouring = false; syncPourBtn();
+      chime('good'); speak('Stop!');
+      $('stopFlash').classList.add('show');
+      const over = poured - step.oz;
+      setHudState(over > 0.4 ? 'heavy pour — we saw +' + fmt(over) + ' oz extra 😄' : 'nailed it');
+      setTimeout(() => {
+        $('stopFlash').classList.remove('show');
+        advanceStep();
+      }, 1400);
+    }
+  } else {
+    state.hitCount = 0;
+  }
+}
+
+function startRecipe(recipe) {
+  state.recipe = recipe;
+  state.stepIdx = -1;
+  $('idleMsg').style.display = 'none';
+  $('recipeBody').style.display = 'block';
+  $('doneBanner').classList.remove('show');
+  $('rName').textContent = recipe.name;
+  $('rMeta').textContent = recipe.glass + (recipe.ai ? ' · ✨ AI original' : '');
+  $('rTagline').textContent = recipe.tagline;
+  renderSteps();
+  const pours = recipe.steps.filter(s => s.type === 'pour');
+  speak(recipe.spokenIntro ||
+    (recipe.name + '. ' + pours.length + ' pours, ' + (recipe.steps.length - pours.length) + ' other steps. Let’s go.'));
+  if (!state.calibrated) toast('Tip: calibrate the empty vessel so pours track automatically.');
+  setTimeout(advanceStep, 400);
+}
+
+function advanceStep() {
+  state.stepIdx++;
+  state.phase = 'idle'; state.hitCount = 0;
+  if (state.stepIdx >= state.recipe.steps.length) return finishRecipe();
+
+  const step = currentStep();
+  renderSteps();
+
+  if (step.type === 'pour') {
+    if (state.calibrated) {
+      state.phase = 'settling';
+      state.settleUntil = performance.now() + 700;
+      setHudState('settling…');
+    } else {
+      setHudState('no calibration — tap Done when poured');
+    }
+    speak('Pour ' + ozWords(step.oz) + ' of ' + step.label + '.');
+  } else {
+    speak(step.label + '. Tap done when you’re there.');
+  }
+}
+
+function finishRecipe() {
+  renderSteps();
+  $('doneBanner').classList.add('show');
+  $('doneMsg').textContent = state.recipe.name + ' — served in a ' + state.recipe.glass + '.';
+  chime('good'); chime('good');
+  speak('Cheers! ' + state.recipe.name + ' is up.');
+  state.recipe && (state.phase = 'idle');
+}
+
+function ozWords(oz) {
+  if (oz === 0.25) return 'a quarter ounce';
+  if (oz === 0.5) return 'half an ounce';
+  if (oz === 0.75) return 'three quarters of an ounce';
+  return oz + (oz === 1 ? ' ounce' : ' ounces');
+}
+
+// ---------- recipe rendering ----------
+function renderSteps() {
+  const el = $('stepsEl');
+  el.innerHTML = '';
+  state.recipe.steps.forEach((step, i) => {
+    const div = document.createElement('div');
+    div.className = 'step' + (i < state.stepIdx ? ' done' : i === state.stepIdx ? ' active' : '');
+    const icon = step.type === 'pour' ? '' : step.type === 'garnish' ? '🌿 ' : '👋 ';
+    let body = step.type === 'pour'
+      ? '<span class="oz">' + fmt(step.oz) + ' oz</span> — ' + step.label
+      : icon + step.label;
+    div.innerHTML = '<div class="num">' + (i < state.stepIdx ? '✓' : (i + 1)) + '</div><div class="body">' + body + '</div>';
+
+    if (i === state.stepIdx) {
+      const wrap = document.createElement('div');
+      if (step.type === 'pour') {
+        wrap.className = 'hud';
+        wrap.innerHTML =
+          '<div class="nums"><span class="cur" id="hudCur">0.0</span>' +
+          '<span class="tgt">/ ' + fmt(step.oz) + ' oz</span>' +
+          '<span class="state" id="hudState">get ready…</span></div>' +
+          '<div class="bar"><div class="fill" id="hudFill"></div></div>' +
+          '<div class="step-actions"><button onclick="advanceStep()">Done → next</button>' +
+          '<button onclick="skipBack()">↩ Back</button></div>';
+      } else {
+        wrap.className = 'hud';
+        wrap.innerHTML = '<div class="step-actions"><button class="primary" onclick="advanceStep()">Done → next</button>' +
+          '<button onclick="skipBack()">↩ Back</button></div>';
+      }
+      div.querySelector('.body').appendChild(wrap);
+    }
+    el.appendChild(div);
+  });
+}
+
+function updateHud(poured, target) {
+  const cur = $('hudCur'), fill = $('hudFill');
+  if (!cur) return;
+  cur.textContent = fmt(poured);
+  const pct = Math.min(100, (poured / target) * 100);
+  fill.style.width = pct + '%';
+  fill.classList.toggle('over', poured > target + 0.3);
+}
+function setHudState(msg) { const s = $('hudState'); if (s) s.textContent = msg; }
+function skipBack() {
+  if (state.stepIdx > 0) { state.stepIdx -= 2; advanceStep(); }
+}
+
+// ---------- command handling ----------
+// Known classics start instantly and free; anything else goes to the AI bartender.
+const FILLER = new Set(['make', 'me', 'a', 'an', 'the', 'please', 'hey', 'can', 'you', 'i',
+  'want', 'would', 'like', 'pour', 'mix', 'fix', 'get', 'us', 'my', 'drink', 'cocktail', 'up', 'one']);
+
+function localMatch(t) {
+  let best = null;
+  for (const r of RECIPES) {
+    for (const n of [r.name.toLowerCase(), ...r.aliases]) {
+      if (t.includes(n) && (!best || n.length > best.len)) best = { r, len: n.length, n };
+    }
+  }
+  return best;
+}
+
+function handleUtterance(raw) {
+  const t = raw.toLowerCase().replace(/[^a-z0-9&\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return;
+  const best = localMatch(t);
+  const meaningful = t.split(' ').filter(w => w && !FILLER.has(w)).join(' ');
+  if (best && best.n.split(' ').every(w => FILLER.has(w) || meaningful.includes(w)) &&
+      meaningful.replace(best.n, '').trim() === '') {
+    startRecipe(best.r); // plain order for a classic — no AI needed
+    return;
+  }
+  if (!best && /^(surprise|random|anything|dealers? choice|something good)$/.test(meaningful)) {
+    const r = RECIPES[Math.floor(Math.random() * RECIPES.length)];
+    toast('Dealer’s choice: ' + r.name);
+    startRecipe(r);
+    return;
+  }
+  aiOrder(raw, best);
+}
+
+// ---------- AI bartender ----------
+let aiBusy = false;
+
+function setAiState(ok) {
+  $('aiPillText').textContent = ok ? 'AI bartender ✓' : 'AI offline — classics only';
+  $('aiPill').style.opacity = ok ? '1' : '0.55';
+}
+
+function normalizeAiRecipe(r) {
+  return {
+    id: 'ai-' + Date.now(),
+    name: r.name || 'Mystery Drink',
+    glass: r.glass || 'rocks',
+    tagline: r.tagline || '',
+    spokenIntro: r.spoken_intro,
+    ai: true,
+    steps: (r.steps || []).map(s => ({
+      type: s.type === 'pour' && !(s.oz > 0) ? 'action' : (s.type || 'action'),
+      label: s.label || '…',
+      oz: s.oz,
+    })),
+  };
+}
+
+async function aiOrder(raw, fallbackMatch) {
+  if (aiBusy) return;
+  aiBusy = true;
+  $('idleMsg').style.display = 'none';
+  $('recipeBody').style.display = 'none';
+  $('thinkingMsg').style.display = 'block';
+  $('thinkingOrder').textContent = raw;
+  speak('Let me think about that.');
+  try {
+    const res = await fetch('/api/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: raw }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.recipe) throw new Error(data.error || 'AI request failed');
+    setAiState(true);
+    startRecipe(normalizeAiRecipe(data.recipe));
+  } catch (err) {
+    setAiState(false);
+    if (fallbackMatch) {
+      toast('AI unreachable — pouring the closest classic: ' + fallbackMatch.r.name, 4500);
+      startRecipe(fallbackMatch.r);
+    } else {
+      toast('AI bartender unreachable (' + err.message + ') — tap a classic below.', 5500);
+      $('idleMsg').style.display = 'block';
+    }
+  } finally {
+    aiBusy = false;
+    $('thinkingMsg').style.display = 'none';
+  }
+}
+
+// ---------- voice ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+function toggleMic() {
+  if (!SR) { toast('This browser has no speech recognition — Chrome does. Text box works everywhere.'); return; }
+  state.listening ? stopMic() : startMic();
+}
+function startMic() {
+  rec = new SR();
+  rec.lang = 'en-US'; rec.continuous = true; rec.interimResults = false;
+  rec.onresult = e => {
+    const t = e.results[e.results.length - 1][0].transcript;
+    toast('🎙 “' + t.trim() + '”');
+    handleUtterance(t);
+  };
+  rec.onerror = e => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      toast('Mic blocked — allow microphone access for this page.', 5000);
+      stopMic();
+    }
+  };
+  rec.onend = () => { if (state.listening) { try { rec.start(); } catch (e) {} } };
+  try {
+    rec.start();
+    state.listening = true;
+    $('micBtn').classList.add('on');
+    $('micPill').classList.add('listening');
+    $('micPillText').textContent = 'listening…';
+    toast('Listening. Say “make me a negroni.”');
+  } catch (e) { toast('Couldn’t start the mic: ' + e.message); }
+}
+function stopMic() {
+  state.listening = false;
+  if (rec) { try { rec.stop(); } catch (e) {} }
+  $('micBtn').classList.remove('on');
+  $('micPill').classList.remove('listening');
+  $('micPillText').textContent = 'mic off';
+}
+
+// ---------- overlay ----------
+function drawOverlay() {
+  octx.clearRect(0, 0, W, H);
+  const { x, y, w, h } = REGION;
+
+  // guide box
+  octx.strokeStyle = 'rgba(246,168,33,0.85)';
+  octx.lineWidth = 2;
+  octx.setLineDash([10, 7]);
+  octx.strokeRect(x, y, w, h);
+  octx.setLineDash([]);
+  // rim / bottom labels
+  octx.fillStyle = 'rgba(246,168,33,0.9)';
+  octx.font = '600 13px Helvetica';
+  octx.fillText('rim', x + w + 8, y + 5);
+  octx.fillText('bottom', x + w + 8, y + h + 4);
+
+  // detected liquid line
+  if (state.calibrated && state.levelRowSmooth !== null && state.ozSmooth > 0.15) {
+    const ly = y + state.levelRowSmooth;
+    octx.strokeStyle = '#58a6ff';
+    octx.lineWidth = 3;
+    octx.beginPath(); octx.moveTo(x - 14, ly); octx.lineTo(x + w + 14, ly); octx.stroke();
+    octx.fillStyle = '#58a6ff';
+    octx.font = 'bold 15px Helvetica';
+    octx.fillText(fmt(state.ozSmooth) + ' oz', x + w + 20, ly + 5);
+  }
+
+  if (!state.source) {
+    octx.fillStyle = 'rgba(232,237,244,0.75)';
+    octx.font = '600 18px Helvetica';
+    octx.textAlign = 'center';
+    octx.fillText('Start the camera — or Sim mode to demo without one', W / 2, H / 2);
+    octx.textAlign = 'left';
+  }
+}
+
+// ---------- main loop ----------
+function render(now) {
+  if (state.source === 'sim') {
+    drawSim(now);
+    vctx.drawImage(simCanvas, 0, 0, W, H);
+  } else if (state.source === 'camera' && camVideo.readyState >= 2) {
+    // cover-fit the camera frame into the 4:3 view
+    const vw = camVideo.videoWidth, vh = camVideo.videoHeight;
+    const scale = Math.max(W / vw, H / vh);
+    const dw = vw * scale, dh = vh * scale;
+    vctx.drawImage(camVideo, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  } else {
+    vctx.fillStyle = '#0a0d12'; vctx.fillRect(0, 0, W, H);
+  }
+  if (state.source) analyze();
+  drawOverlay();
+}
+
+let lastFrameAt = 0;
+function loop(now) {
+  requestAnimationFrame(loop); // schedule first so an error below can't kill the chain
+  lastFrameAt = now;
+  try { render(now); } catch (e) { /* skip the bad frame, keep running */ }
+}
+// watchdog: when rAF is throttled (backgrounded tab, app switch), keep the pipeline alive
+setInterval(() => {
+  if (performance.now() - lastFrameAt > 400) {
+    lastFrameAt = performance.now();
+    try { render(lastFrameAt); } catch (e) {}
+  }
+}, 200);
+
+// ---------- sim controls ----------
+function syncPourBtn() {
+  $('pourBtn').textContent = state.sim.pouring ? '⏸ Stop pour' : '▶ Start pour';
+  $('pourBtn').classList.toggle('danger', state.sim.pouring);
+  $('pourBtn').classList.toggle('good', !state.sim.pouring);
+}
+
+// ---------- wiring ----------
+$('camBtn').onclick = startCamera;
+$('simBtn').onclick = startSim;
+$('calBtn').onclick = () => beginCalibration(false);
+$('micBtn').onclick = toggleMic;
+$('goBtn').onclick = () => { handleUtterance($('cmdInput').value); $('cmdInput').value = ''; };
+$('cmdInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('goBtn').click(); });
+$('pourBtn').onclick = () => { state.sim.pouring = !state.sim.pouring; syncPourBtn(); };
+$('simResetBtn').onclick = () => { state.sim.oz = 0; state.sim.pouring = false; syncPourBtn(); };
+$('glassSel').onchange = () => { if (state.calibrated) toast('Vessel changed — recalibrate for accurate ounces.'); };
+
+RECIPES.forEach(r => {
+  const b = document.createElement('button');
+  b.textContent = r.name;
+  b.onclick = () => startRecipe(r);
+  $('chips').appendChild(b);
+});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
