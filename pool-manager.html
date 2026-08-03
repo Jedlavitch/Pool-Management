@@ -96,6 +96,7 @@
   <button onclick="showPage('timeclock',this)">Time Clock</button>
   <button onclick="showPage('employees',this)">Employees</button>
   <button onclick="showPage('board',this)">Board</button>
+  <button onclick="showPage('snackbar',this)">🍔 Snack Bar</button>
   <button onclick="showPage('reports',this)">Reports</button>
   <button onclick="showPage('pools',this)">🏊 Pools</button>
 </nav>
@@ -530,6 +531,60 @@
   </div>
 </div>
 
+<!-- SNACK BAR -->
+<div class="page" id="page-snackbar">
+  <div class="stats-grid" id="sb-stats"></div>
+
+  <div class="card">
+    <h2>Kitchen Display</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">
+      Open this on the tablet or TV in the snack bar. Orders your waiters take appear
+      there within seconds, and the status they set shows up on the waiters' phones.</p>
+    <div class="qr-url" id="kds-url">Loading…</div>
+  </div>
+
+  <div class="card">
+    <h2>Live Orders
+      <button class="btn btn-sm btn-primary" style="float:right" onclick="renderSnackbar()">↻ Refresh</button>
+    </h2>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>#</th><th>Where</th><th>Items</th><th>Waiter</th><th>Placed</th><th>Total</th><th>Status</th><th></th></tr></thead>
+        <tbody id="sb-orders"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Menu</h2>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>Item</label>
+        <input type="text" id="mi-name" placeholder="e.g. Veggie Burger" />
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <input type="text" id="mi-cat" list="mi-cats" placeholder="Grill" />
+        <datalist id="mi-cats"></datalist>
+      </div>
+      <div class="form-group">
+        <label>Price</label>
+        <input type="number" id="mi-price" step="0.25" min="0" placeholder="0.00" />
+      </div>
+      <div class="form-group" style="flex:0">
+        <label>&nbsp;</label>
+        <button class="btn btn-primary" onclick="addMenuItem()">Add Item</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Item</th><th>Category</th><th>Price</th><th>On the menu</th><th></th></tr></thead>
+        <tbody id="sb-menu"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- Employee Pools Modal -->
 <div id="emp-pools-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:14px;padding:24px;width:90%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.2)">
@@ -586,7 +641,8 @@ function rerenderActive() {
   const active = document.querySelector('.page.active');
   const name = active ? active.id.replace('page-', '') : 'chemicals';
   ({ chemicals:renderChemicals, schedule:renderSchedule, timeclock:renderTimeclock,
-     employees:renderEmployees, board:renderBoard, reports:renderReports, pools:renderPools }[name] || (()=>{}))();
+     employees:renderEmployees, board:renderBoard, reports:renderReports, pools:renderPools,
+     snackbar:renderSnackbar }[name] || (()=>{}))();
 }
 function switchPool(id) {
   activePoolId = Number(id);
@@ -635,7 +691,15 @@ function showPage(name, btn) {
   if (name==='reports') renderReports();
   if (name==='board') renderBoard();
   if (name==='pools') renderPools();
+  if (name==='snackbar') renderSnackbar();
 }
+
+// Orders move on their own while a manager watches — keep the board honest.
+setInterval(() => {
+  if (document.getElementById('page-snackbar')?.classList.contains('active')) {
+    renderSnackbar().catch(() => {});
+  }
+}, 10000);
 
 // ── QR Code ────────────────────────────────────────────────────────────────
 async function buildQR() {
@@ -1335,6 +1399,106 @@ async function exportCSV() {
   const blob=new Blob([header+rows],{type:'text/csv'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download=`pool-chemical-log-${from}-to-${to}.csv`; a.click();
+}
+
+// ── Snack bar ──────────────────────────────────────────────────────────────
+// Managers own the menu and watch the pass; the cooking itself happens on the
+// kitchen display (/kds) and the ordering on the waiters' phones.
+let SB = { orders: [], menu: [] };
+const ORDER_LOOK = {
+  new:       ['Sent',    '#e0f2fe', '#075985'],
+  preparing: ['Cooking', '#fef3c7', '#92400e'],
+  ready:     ['Ready',   '#dcfce7', '#065f46'],
+  served:    ['Served',  '#f1f5f9', '#475569'],
+  void:      ['Void',    '#fee2e2', '#991b1b'],
+};
+const escM = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function renderSnackbar() {
+  document.getElementById('kds-url').textContent = `${location.origin}/kds`;
+  try {
+    SB = await (await fetch(`/api/orders?poolId=${activePoolId}`)).json();
+  } catch (e) {
+    document.getElementById('sb-orders').innerHTML = `<tr><td colspan="8" class="empty">Can't reach the server.</td></tr>`;
+    return;
+  }
+  const orders = SB.orders || [], menu = SB.menu || [];
+
+  // Today's numbers. Prep time is measured on tickets that actually got there.
+  const counted = orders.filter(o => o.status !== 'void');
+  const revenue = counted.reduce((s, o) => s + (o.total || 0), 0);
+  const items   = counted.reduce((s, o) => s + o.items.reduce((n, i) => n + i.qty, 0), 0);
+  const timed   = orders.filter(o => o.readyTs && o.createdTs);
+  const avgMin  = timed.length
+    ? (timed.reduce((s, o) => s + (o.readyTs - o.createdTs), 0) / timed.length / 60000) : null;
+  const openNow = orders.filter(o => ['new','preparing','ready'].includes(o.status)).length;
+  document.getElementById('sb-stats').innerHTML = `
+    <div class="stat-box"><div class="val">${counted.length}</div><div class="lbl">Orders Today</div></div>
+    <div class="stat-box"><div class="val">${items}</div><div class="lbl">Items Sold</div></div>
+    <div class="stat-box"><div class="val">$${revenue.toFixed(2)}</div><div class="lbl">Revenue</div></div>
+    <div class="stat-box"><div class="val">${avgMin == null ? '—' : avgMin.toFixed(1)}</div><div class="lbl">Avg Min to Ready</div></div>
+    <div class="stat-box"><div class="val">${openNow}</div><div class="lbl">Working Now</div></div>`;
+
+  // Live orders — newest first, since a manager scans the top of the list
+  const rows = [...orders].reverse();
+  document.getElementById('sb-orders').innerHTML = rows.length ? rows.map(o => {
+    const [lbl, bg, fg] = ORDER_LOOK[o.status] || ORDER_LOOK.new;
+    return `<tr>
+      <td><b>${o.num}</b></td>
+      <td>${escM(o.table)}</td>
+      <td style="font-size:.8rem">${o.items.map(i => `${i.qty}× ${escM(i.name)}`).join(', ')}</td>
+      <td>${escM(o.empName || '—')}</td>
+      <td>${fmtTime(o.placed)}</td>
+      <td>$${(o.total || 0).toFixed(2)}</td>
+      <td><span class="badge" style="background:${bg};color:${fg}">${lbl}</span></td>
+      <td>${['served','void'].includes(o.status) ? '' :
+        `<button class="btn btn-danger btn-sm" onclick="voidOrder(${o.id},${o.num})">Void</button>`}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="8" class="empty">No orders today.</td></tr>`;
+
+  // Menu
+  document.getElementById('mi-cats').innerHTML =
+    [...new Set(menu.map(m => m.category))].map(c => `<option value="${escM(c)}">`).join('');
+  document.getElementById('sb-menu').innerHTML = menu.length ? menu.map(m => `
+    <tr>
+      <td><input type="text" value="${escM(m.name)}" style="border:none;background:none;font-weight:600;padding:2px"
+        onchange="updateMenuItem(${m.id},'name',this.value)"/></td>
+      <td><input type="text" value="${escM(m.category)}" list="mi-cats" style="border:none;background:none;padding:2px;width:110px"
+        onchange="updateMenuItem(${m.id},'category',this.value)"/></td>
+      <td><input type="number" step="0.25" min="0" value="${Number(m.price || 0).toFixed(2)}"
+        style="border:none;background:none;padding:2px;width:80px"
+        onchange="updateMenuItem(${m.id},'price',this.value)"/></td>
+      <td><input type="checkbox" ${m.active !== false ? 'checked' : ''} style="width:auto"
+        onchange="updateMenuItem(${m.id},'active',this.checked)"/></td>
+      <td><button class="btn btn-danger btn-sm" onclick="deleteMenuItem(${m.id},'${escM(m.name).replace(/'/g,"\\'")}')">Delete</button></td>
+    </tr>`).join('') : `<tr><td colspan="5" class="empty">No menu items yet.</td></tr>`;
+}
+
+async function addMenuItem() {
+  const name = document.getElementById('mi-name').value.trim();
+  if (!name) return alert('Give the item a name.');
+  await api.post('/api/menu', {
+    poolId: activePoolId, name,
+    category: document.getElementById('mi-cat').value.trim() || 'Snacks',
+    price: document.getElementById('mi-price').value || 0,
+  });
+  ['mi-name','mi-cat','mi-price'].forEach(id => document.getElementById(id).value = '');
+  renderSnackbar();
+}
+async function updateMenuItem(id, field, value) {
+  await api.post('/api/menu/update', {id, [field]: value});
+  renderSnackbar();
+}
+async function deleteMenuItem(id, name) {
+  if (!confirm(`Remove "${name}" from the menu? Past orders keep it.`)) return;
+  await api.post('/api/menu/delete', {id});
+  renderSnackbar();
+}
+async function voidOrder(id, num) {
+  if (!confirm(`Void order #${num}? The kitchen and the waiter both see it cancelled.`)) return;
+  await api.post('/api/order/status', {id, status: 'void', byName: 'Management'});
+  renderSnackbar();
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
