@@ -531,6 +531,29 @@ select.form-inp{cursor:pointer;}
 .req-form-lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
 
 /* ── Utilities ─────────────────────────────────────────────────────────── */
+/* ── Kitchen status (waiter's view of the pass) ────────────────────────── */
+.kt-card{
+  background:var(--card);border-radius:var(--r-sm);padding:11px 13px;margin-bottom:7px;
+  box-shadow:var(--shadow);border-left:4px solid var(--blue);display:flex;align-items:center;gap:11px;
+}
+.kt-card.ready{
+  background:var(--green-lt);border-left-color:var(--green);
+  animation:ktpulse 1.8s ease-in-out infinite;
+}
+@keyframes ktpulse{0%,100%{box-shadow:var(--shadow);}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--green) 26%,transparent);}}
+.kt-card.preparing{border-left-color:var(--yellow);}
+.kt-num{font-size:.95rem;font-weight:800;flex-shrink:0;}
+.kt-body{flex:1;min-width:0;}
+.kt-where{font-size:.86rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kt-state{font-size:.74rem;font-weight:700;margin-top:2px;}
+.kt-state.new{color:var(--blue);} .kt-state.preparing{color:var(--yellow);} .kt-state.ready{color:var(--green);}
+.kt-btn{
+  flex-shrink:0;padding:9px 14px;border:none;border-radius:9px;background:var(--green);
+  color:#fff;font-size:.8rem;font-weight:800;cursor:pointer;
+}
+.kt-btn:active{opacity:.85;}
+.kt-age{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0;}
+
 .empty{text-align:center;padding:22px 16px;color:var(--muted);font-size:.86rem;}
 .logout-link{display:block;text-align:center;margin-top:18px;background:none;border:none;color:var(--muted);font-size:.78rem;cursor:pointer;}
 
@@ -859,6 +882,7 @@ select.form-inp{cursor:pointer;}
   <div id="home-notif"></div>
   <div id="home-clock"></div>
   <div id="home-flag-banner"></div>
+  <div id="home-kitchen"></div>
   <div id="home-breaks"></div>
   <div id="home-today"></div>
   <button class="logout-link" onclick="switchPool()" style="margin-top:18px;color:var(--blue)">🏊 Switch pool</button>
@@ -1489,6 +1513,9 @@ async function loadHome() {
     }
   }
 
+  // What the kitchen owes me right now
+  renderHomeKitchen().catch(() => {});
+
   // My breaks for today
   renderHomeBreaks(data);
 
@@ -1514,6 +1541,60 @@ async function loadHome() {
   document.getElementById('tab-bar').classList.add('visible');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-home').classList.add('active');
+}
+
+// ══ Kitchen status ══════════════════════════════════════════════════════════
+// The POS books the order and takes the money; this is the other half — where
+// that food actually is. Same records, read through the `kitchen` field the
+// kitchen display writes.
+let _ktKnownReady = null;
+const KT_STATE = {
+  new:       ['Sent to the kitchen', 'new'],
+  preparing: ['Cooking now',         'preparing'],
+  ready:     ['READY — pick it up!', 'ready'],
+};
+async function renderHomeKitchen() {
+  const el = document.getElementById('home-kitchen');
+  if (!el || !empId || activePoolId == null) return;
+  let rows = [];
+  try {
+    const d = await (await fetch(`/api/orders?poolId=${activePoolId}`)).json();
+    rows = (d.orders || []).filter(o =>
+      String(o.empId) === String(empId) && o.status !== 'void' &&
+      ['new', 'preparing', 'ready'].includes(o.kitchen));
+  } catch (e) { return; }   // a dropped poll shouldn't blank the card
+
+  if (!rows.length) { el.innerHTML = ''; _ktKnownReady = []; return; }
+  const ready = rows.filter(o => o.kitchen === 'ready');
+  el.innerHTML = `<p class="lbl">${ready.length ? '🍔 Ready for pickup' : '🍳 In the kitchen'}</p>` +
+    rows.map(o => {
+      const [lbl, cls] = KT_STATE[o.kitchen];
+      const mins = Math.floor((Date.now() - (o.createdTs || Date.now())) / 60000);
+      const where = o.seatLabel || o.guestName || 'Walk-up';
+      const items = o.items.reduce((n, i) => n + i.qty, 0);
+      return `
+        <div class="kt-card ${cls}">
+          <span class="kt-num">#${o.num}</span>
+          <div class="kt-body">
+            <div class="kt-where">${PD.esc(where)} · ${items} item${items === 1 ? '' : 's'}</div>
+            <div class="kt-state ${cls}">${lbl}</div>
+          </div>
+          ${o.kitchen === 'ready'
+            ? `<button class="kt-btn" onclick="pickedUp(${o.id})">Picked up ✓</button>`
+            : `<span class="kt-age">${mins}m</span>`}
+        </div>`;
+    }).join('');
+
+  // Buzz once when the kitchen calls something up
+  const ids = ready.map(o => o.id);
+  if (_ktKnownReady && ids.some(id => !_ktKnownReady.includes(id)) && navigator.vibrate) {
+    navigator.vibrate([120, 60, 120]);
+  }
+  _ktKnownReady = ids;
+}
+async function pickedUp(id) {
+  await post('/api/order/kitchen', {id, kitchen: 'served', byName: empName});
+  renderHomeKitchen();
 }
 
 // ══ Breaks ══════════════════════════════════════════════════════════════════
@@ -2863,6 +2944,14 @@ async function init() {
   setInterval(() => {
     if (empId && activePoolId != null) renderNotifications().catch(() => {});
   }, 30000);
+  // Food moves faster than messages — refresh the kitchen card every 8s so a
+  // waiter sees "Ready" without opening anything.
+  setInterval(() => {
+    if (empId && activePoolId != null &&
+        document.getElementById('screen-home').classList.contains('active')) {
+      renderHomeKitchen().catch(() => {});
+    }
+  }, 8000);
 }
 init();
 </script>

@@ -66,6 +66,20 @@ POOL_SCOPED = ('shifts', 'chemicals', 'punches', 'announcements', 'resources', '
 # Deck items guests can actually be seated at — everything else is decor
 BOOKABLE_TYPES = ('lounger', 'chair', 'cabana', 'table', 'daybed')
 
+# ── Kitchen display ─────────────────────────────────────────────────────────
+# An order carries two independent states, because money and food move on
+# different clocks: `status` is the tab (open → paid, or void), and `kitchen`
+# is the food (new → preparing → ready → served). A guest can pay up front and
+# still be waiting on a burger; a tab can stay open long after the food landed.
+KITCHEN_FLOW = ['new', 'preparing', 'ready', 'served']
+KITCHEN_STAMPS = {'preparing': 'startedTs', 'ready': 'readyTs', 'served': 'servedTs'}
+
+def next_ticket_num(data, pool_id):
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    same_day = [o for o in data.get('orders', [])
+                if o.get('date') == today_str and str(o.get('poolId')) == str(pool_id)]
+    return max([o.get('num') or 0 for o in same_day], default=0) + 1
+
 def to_cents(v):
     """Money is stored as whole cents everywhere so totals never drift the way
     floating-point dollars do. Accepts 4, '4', '4.50', '$4.50'."""
@@ -234,6 +248,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
         elif p in ('/worker', '/worker.html', '/maralavitchstaff'):
             serve_file(self, 'worker.html')
+        elif p in ('/kds', '/kds.html', '/kitchen'):
+            serve_file(self, 'kds.html')
         elif p in ('/print-qr', '/print-qr.html'):
             serve_file(self, 'print-qr.html')
         elif p == '/manifest.json':
@@ -249,6 +265,27 @@ class Handler(BaseHTTPRequestHandler):
                 se['has_password'] = bool(e.get('password'))
                 out['employees'].append(se)
             self.send_json(out)
+        elif p == '/api/orders':
+            # Lightweight feed for the kitchen display and the waiters' status card.
+            # Both poll it every few seconds, so it stays far smaller than /api/data.
+            from urllib.parse import parse_qs
+            q = parse_qs(urlparse(self.path).query)
+            pid = q.get('poolId', [None])[0]
+            d = load_data()
+            rows = d.get('orders', [])
+            if pid not in (None, '', 'all'):
+                rows = [o for o in rows if str(o.get('poolId')) == str(pid)]
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            # Today's tickets, plus anything the kitchen still owes from before midnight
+            rows = [o for o in rows
+                    if o.get('date') == today_str
+                    or (o.get('status') != 'void' and o.get('kitchen') in ('new', 'preparing', 'ready'))]
+            self.send_json({
+                'orders': sorted(rows, key=lambda o: o.get('createdTs') or 0),
+                'pools': [{'id': x['id'], 'name': x.get('name', ''), 'status': x.get('status', 'open')}
+                          for x in d.get('pools', [])],
+                'now': int(datetime.now().timestamp() * 1000),
+            })
         elif p == '/api/ip':
             self.send_json({'ip': get_local_ip(), 'host': get_mdns_host(), 'port': PORT, 'base_url': get_base_url()})
         elif p.startswith('/photos/'):
@@ -991,6 +1028,14 @@ class Handler(BaseHTTPRequestHandler):
                 'created': datetime.now().strftime('%Y-%m-%d %H:%M'),
                 'date': datetime.now().strftime('%Y-%m-%d'),
                 'paidAt': datetime.now().strftime('%H:%M') if status == 'paid' else None,
+                # ── Kitchen side ──
+                # Ticket numbers restart at 1 each day, per pool: "order 12" has to
+                # mean one thing on the pass at any given moment.
+                'num': next_ticket_num(data, body.get('poolId')),
+                'kitchen': 'new',
+                'createdTs': int(datetime.now().timestamp() * 1000),
+                'startedTs': None, 'readyTs': None, 'servedTs': None,
+                'kitchenNote': (body.get('kitchenNote') or '').strip(),
             }
             data.setdefault('orders', []).insert(0, order)
             save_data(data)
@@ -1016,6 +1061,34 @@ class Handler(BaseHTTPRequestHandler):
                 'status': 'paid',
                 'paidAt': datetime.now().strftime('%H:%M'),
             })
+            save_data(data)
+            self.send_json({'ok': True, 'order': order})
+
+        elif p == '/api/order/kitchen':
+            # The cook bumping a ticket along. Deliberately separate from
+            # /api/order/pay — the food and the money settle independently.
+            order = next((o for o in data.get('orders', []) if o['id'] == body.get('id')), None)
+            state = body.get('kitchen')
+            if not order:
+                self.send_json({'ok': False, 'error': 'Not found'}, 404); return
+            if state not in KITCHEN_FLOW:
+                self.send_json({'ok': False, 'error': f'Unknown kitchen state: {state}'}, 400); return
+            prev = order.get('kitchen')
+            order['kitchen'] = state
+            stamp = KITCHEN_STAMPS.get(state)
+            if stamp:
+                order[stamp] = int(datetime.now().timestamp() * 1000)
+            order['bumpedBy'] = body.get('byName', '')
+            # Tell the waiter their food is up — they're out on the deck, not
+            # standing at the pass watching for it.
+            if state == 'ready' and prev != 'ready' and order.get('empId'):
+                where = order.get('seatLabel') or order.get('guestName') or 'the deck'
+                data.setdefault('notifications', []).insert(0, {
+                    'id': ts() + 1, 'empId': str(order['empId']), 'poolId': order.get('poolId'),
+                    'title': f"🍔 Order #{order.get('num')} is ready",
+                    'message': f"Pick up for {where} — {sum(i['qty'] for i in order.get('items', []))} item(s) on the pass.",
+                    'read': False, 'ts': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                })
             save_data(data)
             self.send_json({'ok': True, 'order': order})
 
