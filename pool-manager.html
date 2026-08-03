@@ -5,6 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Maralavitchmanagement</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  /* Sign-in gate */
+  #gate{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+    padding:20px;background:linear-gradient(170deg,#e0f2fe,#bae6fd);}
+  #gate.hidden{display:none;}
+  .gate-card{background:#fff;border-radius:18px;padding:32px 30px;width:100%;max-width:370px;
+    box-shadow:0 24px 60px -14px rgba(2,62,138,.42);text-align:center;
+    font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;}
+  .gate-mark{font-size:44px;line-height:1;margin-bottom:6px;}
+  .gate-card h2{margin:0;font-size:1.4rem;font-weight:800;letter-spacing:-.02em;color:#0f172a;}
+  .gate-sub{margin:4px 0 22px;color:#64748b;font-size:.85rem;font-weight:600;}
+  .gate-lbl{display:block;text-align:left;font-size:.7rem;font-weight:800;letter-spacing:.07em;
+    text-transform:uppercase;color:#64748b;margin:0 0 5px;}
+  #gate select,#gate input{width:100%;padding:12px 13px;border:1.5px solid #e2e8f0;border-radius:10px;
+    font-size:.95rem;font-family:inherit;margin-bottom:15px;background:#fff;color:#0f172a;box-sizing:border-box;}
+  #gate select:focus,#gate input:focus{outline:none;border-color:#0284c7;}
+  #gate-go{width:100%;padding:13px;border:0;border-radius:10px;background:#0284c7;color:#fff;
+    font-size:.95rem;font-weight:800;font-family:inherit;cursor:pointer;}
+  #gate-go:hover{background:#0369a1;}
+  #gate-go:disabled{opacity:.6;cursor:default;}
+  .gate-err{color:#dc2626;font-size:.82rem;font-weight:600;margin:0 0 12px;min-height:1em;}
+</style>
 <script src="pos-shared.js"></script>
 <!-- Static demo (GitHub Pages): both are inert when a real server answers. -->
 <script src="demo-data.js"></script>
@@ -130,6 +152,21 @@
 </style>
 </head>
 <body>
+
+<!-- Sign-in gate: covers the dashboard until a manager authenticates. -->
+<div id="gate">
+  <div class="gate-card">
+    <div class="gate-mark">🏊</div>
+    <h2>Mar-A-Lavitch</h2>
+    <p class="gate-sub">Management sign-in</p>
+    <label class="gate-lbl" for="gate-who">Who are you?</label>
+    <select id="gate-who"></select>
+    <label class="gate-lbl" for="gate-pw">Password</label>
+    <input id="gate-pw" type="password" autocomplete="current-password" placeholder="Password"/>
+    <p id="gate-err" class="gate-err"></p>
+    <button id="gate-go" type="button">Sign in</button>
+  </div>
+</div>
 
 <header>
   <h1>🏊 Maralavitchmanagement</h1>
@@ -2071,7 +2108,62 @@ async function voidKitchenOrder(id, num) {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
+/* ══ Sign-in gate ══════════════════════════════════════════════════════════
+   Only management roles get the dashboard. Passwords are checked by
+   /api/auth, which waves through anyone who has not set one yet — same rule
+   the staff app follows, so a fresh install isn't locked out of itself. */
+const GATE_ROLES = ['Manager', 'Owner', 'Staffer'];
+
+async function openGate() {
+  const gate = document.getElementById('gate');
+  const who  = document.getElementById('gate-who');
+  const pw   = document.getElementById('gate-pw');
+  const err  = document.getElementById('gate-err');
+  const go   = document.getElementById('gate-go');
+
+  let staff = [];
+  try {
+    const d = await (await fetch('/api/data')).json();
+    staff = (d.employees || []).filter(e => GATE_ROLES.includes(e.role));
+  } catch (e) { /* handled by the empty-list branch below */ }
+
+  if (!staff.length) {           // nobody to sign in as — don't lock the door
+    gate.classList.add('hidden');
+    return;
+  }
+
+  who.innerHTML = staff.map(e => `<option value="${e.id}">${e.name} · ${e.role}</option>`).join('');
+
+  const submit = async () => {
+    err.textContent = '';
+    go.disabled = true;
+    try {
+      const r = await (await fetch('/api/auth', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empId: who.value, password: pw.value }),
+      })).json();
+      if (r.ok) {
+        sessionStorage.setItem('mal-mgmt-signed-in', who.value);
+        gate.classList.add('hidden');
+      } else {
+        err.textContent = r.error || 'Incorrect password';
+        pw.value = ''; pw.focus();
+      }
+    } catch (e) {
+      err.textContent = 'Could not reach the server.';
+    }
+    go.disabled = false;
+  };
+
+  go.addEventListener('click', submit);
+  pw.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+
+  if (sessionStorage.getItem('mal-mgmt-signed-in')) gate.classList.add('hidden');
+  else pw.focus();
+}
+
 (async function init() {
+  openGate();
   document.getElementById('chem-date').value = today();
   document.getElementById('chem-time').value = nowTime();
   document.getElementById('sched-date').value = today();

@@ -590,7 +590,7 @@ function addBanner() {
   setTimeout(() => {
     bar.style.opacity = '0';
     setTimeout(() => bar.remove(), 500);
-  }, 9000);
+  }, 5000);
 }
 
 if (mode === 'demo') addBanner();
