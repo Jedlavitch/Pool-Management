@@ -28,6 +28,9 @@
   .gate-err{color:#dc2626;font-size:.82rem;font-weight:600;margin:0 0 12px;min-height:1em;}
 </style>
 <script src="pos-shared.js"></script>
+<!-- Runs the app from the browser when no server is answering (GitHub Pages). -->
+<script src="starter-data.js"></script>
+<script src="standalone.js"></script>
 <style>
   :root {
     /* Brand blue — shades give depth & hierarchy */
@@ -2177,9 +2180,11 @@ async function openGate() {
   go.addEventListener('click', submit);
   pw.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 
-  // /api/roster's signed_in flag above is the authority on whether the gate
-  // opens; the server holds the session, not this page.
-  pw.focus();
+  // With a server, /api/roster's signed_in flag above is the authority. With
+  // no server there's no cookie to hold a session, so the page remembers it.
+  const noServer = window.MAL_STORE && window.MAL_STORE.mode() === 'standalone';
+  if (noServer && sessionStorage.getItem('mal-mgmt-signed-in')) gate.classList.add('hidden');
+  else pw.focus();
 }
 
 (async function init() {

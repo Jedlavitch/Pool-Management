@@ -79,49 +79,32 @@
   </header>
 
   <div class="cards">
-    <a class="card" id="card-mgmt" href="#">
+    <a class="card" id="card-mgmt" href="pool-manager.html">
       <div class="icon">🗂️</div>
       <h2>Management console</h2>
       <p>Schedule shifts, watch the chemical log, see who's on site, run reports and
          arrange the deck. Built for a desktop in the office.</p>
-      <span class="go">Open</span>
+      <span class="go">Open management</span>
     </a>
 
-    <a class="card" id="card-staff" href="#">
+    <a class="card" id="card-staff" href="worker.html">
       <div class="icon">📱</div>
       <h2>Mar-A-Lavitch Staff</h2>
       <p>What the lifeguards carry: clock in, log a reading, take breaks, seat guests and
          ring up orders. Phone-first, installable, works offline.</p>
-      <span class="go">Open</span>
+      <span class="go">Open staff app</span>
     </a>
   </div>
 
-  <p class="note" id="setup-note" hidden>
-    <b>No server address set yet.</b> These apps run on the club's own server — this page is
-    just the front door. Put its address in <code>app-url.js</code> and both buttons will point
-    at the live app.
-  </p>
-
   <script src="app-url.js"></script>
   <script>
-    // The apps are served by server.py, wherever that is running. This page
-    // only ever points at it — it never pretends to be it.
+    // Both apps run right here in the browser. If the club's own server has an
+    // address set, send people there instead so they get the shared live data.
     (function () {
       var base = (window.APP_URL || '').replace(/\/+$/, '');
-      var mgmt = document.getElementById('card-mgmt');
-      var staff = document.getElementById('card-staff');
-      if (base) {
-        mgmt.href = base + '/maralavitchmanagement';
-        staff.href = base + '/maralavitchstaff';
-      } else {
-        document.getElementById('setup-note').hidden = false;
-        [mgmt, staff].forEach(function (c) {
-          c.removeAttribute('href');
-          c.style.opacity = '.55';
-          c.style.cursor = 'default';
-          c.querySelector('.go').textContent = 'Server address not set';
-        });
-      }
+      if (!base) return;
+      document.getElementById('card-mgmt').href = base + '/maralavitchmanagement';
+      document.getElementById('card-staff').href = base + '/maralavitchstaff';
     })();
   </script>
 
