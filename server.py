@@ -392,6 +392,12 @@ class Handler(BaseHTTPRequestHandler):
         """True if the request may proceed. Writes the refusal itself if not."""
         if path in PUBLIC_API:
             return True
+        # A fresh install on the LAN has no employees yet, so there is nobody
+        # to sign in as and nothing to protect. Letting the first run through
+        # is what stops the app bouncing between its own gate and a 401.
+        # Never on a public host — there, ADMIN_PASSWORD is the way in.
+        if not IS_PUBLIC and not load_data().get('employees'):
+            return True
         user = self.current_user()
         if not user:
             self.send_json({'ok': False, 'error': 'Sign in required'}, 401)

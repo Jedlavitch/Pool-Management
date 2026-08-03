@@ -80,13 +80,36 @@ prices, not personal data. To reset, clear the site's storage or run `MAL_DEMO.r
 
 ## Deploying
 
-The `Procfile` runs it as-is on Railway or anything Procfile-shaped. Two env vars matter:
+The `Procfile` runs it as-is on Railway or anything Procfile-shaped.
 
-- `PORT` — defaults to `8765`
-- `DATA_DIR` — point it at a persistent volume so `data.json` and `photos/` survive restarts
+| Variable | Why |
+|---|---|
+| `PORT` | Defaults to `8765`. Railway sets this itself. |
+| `DATA_DIR` | Point at a persistent volume or `data.json`, `photos/`, and the signing key vanish on redeploy. |
+| `SECRET_KEY` | Signs session cookies. Generated automatically if unset, but then it lives on the volume — set it explicitly to keep sessions alive across volume changes. |
+| `ADMIN_PASSWORD` | The way into a fresh deploy, before any employee has a password. Sign in as **Administrator**. |
 
-`RAILWAY_PUBLIC_DOMAIN` (set automatically on Railway) makes the app generate HTTPS links
-for the QR poster instead of LAN addresses.
+`RAILWAY_PUBLIC_DOMAIN` (set automatically) is also how the app knows it's public: it starts
+refusing blank passwords and marks the session cookie `Secure`.
+
+### Deploying to Railway
+
+1. **railway.app** → New Project → Deploy from GitHub repo → pick this one. It detects Python
+   from `requirements.txt` and runs the `Procfile`.
+2. Add a **Volume**, mount path `/data`.
+3. Under **Variables**, set `DATA_DIR=/data`, an `ADMIN_PASSWORD`, and a `SECRET_KEY` from:
+   ```sh
+   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+4. Settings → Networking → **Generate Domain**.
+5. Open the domain, sign in as **Administrator** with your `ADMIN_PASSWORD`, then add your
+   pool and staff and give each person a password.
+
+A fresh deploy starts empty — `data.json` is gitignored and never leaves your own server, so
+nothing is carried up with the code. To bring the club's real data across, upload your local
+`data.json` into the volume; otherwise set it up fresh from the dashboard.
+
+Once real managers have passwords, remove `ADMIN_PASSWORD` to close the bootstrap door.
 
 ## Also in here
 
