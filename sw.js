@@ -1,12 +1,13 @@
 // Mar-A-Lavitch Staff Service Worker
 // Enables PWA install prompts and "Add to Home Screen" on iOS/Android.
-const CACHE = 'maralavitch-v1';
+const CACHE = 'maralavitch-v2';
 
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll([
       '/maralavitchstaff',
       '/worker.html',
+      '/pos-shared.js',
     ])).catch(() => {})
   );
   self.skipWaiting();
