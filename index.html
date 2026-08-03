@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Mar-A-Lavitch Pool Management</title>
+<meta name="description" content="Live demo — swim club operations: staffing, chemical compliance, deck map, and snack-bar POS."/>
+<style>
+  :root{
+    --bg:#f0f9ff; --bg2:#e0f2fe; --card:#fff; --text:#0f172a; --muted:#64748b;
+    --blue:#0284c7; --blue-dark:#023e8a; --border:#e2e8f0; --shadow:0 1px 3px rgba(15,23,42,.08);
+    --shadow-lg:0 18px 40px -12px rgba(2,62,138,.28);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1117; --bg2:#111827; --card:#161b22; --text:#e6edf3; --muted:#8b949e;
+      --blue:#38bdf8; --blue-dark:#7dd3fc; --border:#30363d; --shadow:0 1px 3px rgba(0,0,0,.4);
+      --shadow-lg:0 18px 40px -12px rgba(0,0,0,.6);
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; padding:clamp(24px,6vw,64px) 20px 56px;
+    background:linear-gradient(170deg,var(--bg) 0%,var(--bg2) 100%);
+    min-height:100vh; color:var(--text);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:840px;margin:0 auto;}
+
+  header{text-align:center;margin-bottom:clamp(28px,5vw,44px);}
+  .mark{font-size:clamp(44px,10vw,64px);line-height:1;margin-bottom:10px;}
+  h1{font-size:clamp(1.7rem,5vw,2.5rem);margin:0 0 10px;letter-spacing:-.02em;font-weight:800;}
+  .tag{color:var(--muted);margin:0 auto;max-width:52ch;font-size:clamp(.95rem,2.4vw,1.05rem);}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:32px;}
+  a.card{
+    display:block;background:var(--card);border:1px solid var(--border);border-radius:16px;
+    padding:24px 22px;text-decoration:none;color:inherit;box-shadow:var(--shadow);
+    transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
+  }
+  a.card:hover,a.card:focus-visible{
+    transform:translateY(-3px);box-shadow:var(--shadow-lg);border-color:var(--blue);outline:none;
+  }
+  .card .icon{font-size:2rem;line-height:1;margin-bottom:12px;}
+  .card h2{margin:0 0 6px;font-size:1.15rem;font-weight:800;letter-spacing:-.01em;}
+  .card p{margin:0 0 14px;color:var(--muted);font-size:.9rem;line-height:1.55;}
+  .card .go{color:var(--blue);font-weight:700;font-size:.86rem;}
+  .card .go::after{content:" →";}
+
+  .note{
+    background:var(--card);border:1px solid var(--border);border-left:3px solid var(--blue);
+    border-radius:12px;padding:16px 18px;font-size:.88rem;color:var(--muted);
+    box-shadow:var(--shadow);margin-bottom:28px;
+  }
+  .note b{color:var(--text);}
+
+  h3{font-size:.78rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);
+     margin:0 0 12px;font-weight:800;}
+  ul.feat{list-style:none;padding:0;margin:0 0 32px;display:grid;
+          grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px 22px;}
+  ul.feat li{font-size:.89rem;color:var(--muted);padding-left:22px;position:relative;line-height:1.5;}
+  ul.feat li::before{content:"✓";position:absolute;left:0;color:var(--blue);font-weight:800;}
+  ul.feat b{color:var(--text);font-weight:700;}
+
+  footer{text-align:center;color:var(--muted);font-size:.85rem;padding-top:26px;border-top:1px solid var(--border);}
+  footer a{color:var(--blue);font-weight:600;text-decoration:none;}
+  footer a:hover{text-decoration:underline;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="mark">🏊</div>
+    <h1>Mar-A-Lavitch Pool Management</h1>
+    <p class="tag">Everything it takes to run a swim club — staffing, chemical compliance,
+       the deck, and the snack bar — in one small server and two web apps.</p>
+  </header>
+
+  <div class="cards">
+    <a class="card" href="pool-manager.html">
+      <div class="icon">🗂️</div>
+      <h2>Management console</h2>
+      <p>Schedule shifts, watch the chemical log, see who's on site, run reports and
+         arrange the deck. Built for a desktop in the office.</p>
+      <span class="go">Open the demo</span>
+    </a>
+
+    <a class="card" href="worker.html">
+      <div class="icon">📱</div>
+      <h2>Mar-A-Lavitch Staff</h2>
+      <p>What the lifeguards carry: clock in, log a reading, take breaks, seat guests and
+         ring up orders. Phone-first, installable, works offline.</p>
+      <span class="go">Open the demo</span>
+    </a>
+  </div>
+
+  <p class="note">
+    <b>This is a demo.</b> Every employee, shift, and punch you'll see is invented — the club's
+    real data lives on its own server and never reaches GitHub. Poke at anything: ring up an
+    order, clock someone in, drag a chair. Changes save to your browser alone, and clearing
+    the site's storage puts it back to the start. Best on a phone for the staff app, a wide
+    window for management.
+  </p>
+
+  <h3>What it does</h3>
+  <ul class="feat">
+    <li><b>Chemical logs</b> graded pass / warn / fail, with CSV export for the health department</li>
+    <li><b>Shift scheduling</b> with bulk creation, requests, and confirmations</li>
+    <li><b>Clock in/out</b> with a photo, a live on-site board, and hours summaries</li>
+    <li><b>Breaks</b> management assigns and staff start from their own phone</li>
+    <li><b>Deck map</b> of loungers and cabanas, identical on phone and desktop</li>
+    <li><b>Reservations &amp; waitlist</b> that seat straight onto the map</li>
+    <li><b>Snack-bar POS</b> — menu, tickets, payment, settle, and void</li>
+    <li><b>Multiple pools</b>, each with its own status, tax rate, and layout</li>
+  </ul>
+
+  <footer>
+    No frameworks, no build step, no database — pure Python standard library and single-file
+    HTML apps.<br/>
+    <a href="https://github.com/Jedlavitch/Pool-Management">Source on GitHub</a>
+  </footer>
+
+</div>
+</body>
+</html>
