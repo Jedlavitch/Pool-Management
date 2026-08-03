@@ -6,8 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="theme-color" id="theme-meta" content="#023e8a"/>
-<link rel="manifest" href="/manifest.json"/>
+<link rel="manifest" href="manifest.json"/>
 <title>Mar-A-Lavitch Staff</title>
+<!-- Static demo (GitHub Pages): both are inert when a real server answers. -->
+<script src="demo-data.js"></script>
+<script src="demo-mode.js"></script>
 <style>
 /* ── Design tokens ─────────────────────────────────────────────────────── */
 :root {
@@ -647,8 +650,9 @@ select.form-inp{cursor:pointer;}
 
 /* Cart bar pinned above the tab bar */
 .cart-bar{position:fixed;left:0;right:0;bottom:64px;max-width:480px;margin:0 auto;z-index:55;padding:0 12px;
-  transform:translateY(140%);transition:transform .22s cubic-bezier(.2,.9,.3,1);pointer-events:none;}
-.cart-bar.up{transform:translateY(0);pointer-events:auto;}
+  transform:translateY(180%);opacity:0;visibility:hidden;
+  transition:transform .22s cubic-bezier(.2,.9,.3,1),opacity .18s,visibility .22s;pointer-events:none;}
+.cart-bar.up{transform:translateY(0);opacity:1;visibility:visible;pointer-events:auto;}
 .cart-bar button{width:100%;padding:14px 16px;border:none;border-radius:var(--r);background:var(--blue);color:#fff;
   font-size:.92rem;font-weight:800;cursor:pointer;font-family:inherit;display:flex;justify-content:space-between;
   align-items:center;box-shadow:0 6px 20px rgba(2,132,199,.4);}
@@ -741,7 +745,7 @@ select.form-inp{cursor:pointer;}
 .locked-note{background:var(--yellow-lt);color:var(--yellow);border-radius:var(--r-sm);padding:11px 13px;
   font-size:.78rem;font-weight:700;margin-bottom:12px;}
 </style>
-<script src="/pos-shared.js"></script>
+<script src="pos-shared.js"></script>
 </head>
 <body>
 
@@ -2929,7 +2933,8 @@ function confirmLeaveLayout() {
 async function init() {
   // Register service worker for PWA
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+    // Skipped on a static host — the cache list points at server routes.
+    if (!window.MAL_STATIC_HOST) navigator.serviceWorker.register('sw.js').catch(()=>{});
   }
   const savedId = localStorage.getItem('pm_worker_id');
   const savedName = localStorage.getItem('pm_worker_name');

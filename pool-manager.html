@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Maralavitchmanagement</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="pos-shared.js"></script>
+<!-- Static demo (GitHub Pages): both are inert when a real server answers. -->
+<script src="demo-data.js"></script>
+<script src="demo-mode.js"></script>
 <style>
   :root {
     /* Brand blue — shades give depth & hierarchy */
@@ -22,7 +26,7 @@
   header h1 { font-size:1.2rem; font-weight:700; }
   header span { font-size:.8rem; opacity:.75; }
   nav { display:flex; background:var(--blue); overflow-x:auto; }
-  nav button { flex:1; min-width:90px; padding:10px 4px; border:none; background:transparent; color:rgba(255,255,255,.75); font-size:.8rem; font-weight:600; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap; }
+  nav button { flex:1; min-width:74px; padding:10px 6px; border:none; background:transparent; color:rgba(255,255,255,.75); font-size:.78rem; font-weight:600; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap; }
   nav button.active { color:white; border-bottom-color:var(--blue-light); background:rgba(0,0,0,.15); }
   .page { display:none; padding:16px; max-width:900px; margin:0 auto; }
   .page.active { display:block; }
@@ -74,6 +78,55 @@
   .qr-info { flex:1; min-width:200px; }
   .qr-url { font-size:.85rem; color:var(--blue); word-break:break-all; background:#eff6ff; padding:8px 10px; border-radius:6px; margin-top:8px; font-family:monospace; }
   @media (max-width:480px) { .form-row { flex-direction:column; } }
+
+  /* ══ Menu / Layout / Sales ═══════════════════════════════════════════ */
+  /* Deck-map palette read by pos-shared.js */
+  :root {
+    --deck-bg:#f8fafc; --deck-border:#e2e8f0; --deck-dot:#e2e8f0;
+    --deck-open:#ecfdf5; --deck-open-edge:#34d399;
+    --deck-res:#fffbeb;  --deck-res-edge:#f59e0b;
+    --deck-act:#dbeafe;  --deck-act-edge:#2563eb;
+    --deck-decor:#f1f5f9;--deck-decor-edge:#cbd5e1;
+    --muted-c:var(--muted);
+  }
+  .mgr-legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:10px; }
+  .mgr-legend .lg { display:inline-flex; align-items:center; gap:6px; font-size:.74rem; font-weight:600; color:var(--muted); }
+  .mgr-legend .sw { width:13px; height:13px; border-radius:3px; border:2px solid; flex-shrink:0; }
+
+  /* Layout editor toolbar */
+  .seat-tools { display:flex; flex-wrap:wrap; gap:8px; }
+  .seat-tool { padding:9px 12px; border:1px solid var(--border); border-radius:8px; background:#fff;
+    font-size:.8rem; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px; font-family:inherit; color:var(--text); }
+  .seat-tool:hover { border-color:var(--blue); background:#f0f9ff; }
+  .sel-panel { background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:12px; margin-top:12px; }
+  .sel-panel h4 { font-size:.85rem; color:var(--blue-dark); margin-bottom:10px; }
+  .swatches { display:flex; gap:6px; }
+  .swatch { width:30px; height:30px; border-radius:6px; border:2px solid rgba(0,0,0,.1); cursor:pointer; }
+  .dirty-note { background:var(--yellow-light); color:#92400e; border-radius:6px; padding:9px 12px;
+    font-size:.8rem; font-weight:600; margin-bottom:10px; }
+
+  /* Menu editor */
+  .menu-cat-h { font-size:.75rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--muted); margin:16px 0 6px; }
+  .menu-cat-h:first-child { margin-top:0; }
+  .mrow { display:flex; align-items:center; gap:12px; padding:9px 10px; border:1px solid var(--border);
+    border-radius:8px; margin-bottom:6px; background:#fff; }
+  .mrow.off { opacity:.55; background:#f8fafc; }
+  .mrow .em { font-size:1.25rem; width:28px; text-align:center; flex-shrink:0; }
+  .mrow .nm { flex:1; min-width:0; }
+  .mrow .nm b { font-size:.9rem; }
+  .mrow .nm div { font-size:.74rem; color:var(--muted); margin-top:1px; }
+  .mrow .pr { font-size:.95rem; font-weight:800; color:var(--blue-dark); min-width:66px; text-align:right; }
+
+  /* Sales */
+  .pay-pill { display:inline-block; padding:3px 9px; border-radius:20px; font-size:.72rem; font-weight:700;
+    background:#e0f2fe; color:#075985; }
+  .pay-pill.comp { background:#fce7f3; color:#9d174d; }
+  .pay-pill.account { background:#fef3c7; color:#92400e; }
+  .pay-pill.card { background:#ede9fe; color:#5b21b6; }
+  .bar-track { background:#f1f5f9; border-radius:4px; height:8px; overflow:hidden; min-width:70px; }
+  .bar-fill { height:100%; background:var(--blue); }
+  .money { font-variant-numeric:tabular-nums; font-weight:700; }
 </style>
 </head>
 <body>
@@ -96,7 +149,10 @@
   <button onclick="showPage('timeclock',this)">Time Clock</button>
   <button onclick="showPage('employees',this)">Employees</button>
   <button onclick="showPage('board',this)">Board</button>
-  <button onclick="showPage('snackbar',this)">🍔 Snack Bar</button>
+  <button onclick="showPage('menu',this)">🍔 Menu</button>
+  <button onclick="showPage('layout',this)">🪑 Layout</button>
+  <button onclick="showPage('sales',this)">💰 Sales</button>
+  <button onclick="showPage('kitchen',this)">🍳 Kitchen</button>
   <button onclick="showPage('reports',this)">Reports</button>
   <button onclick="showPage('pools',this)">🏊 Pools</button>
 </nav>
@@ -531,57 +587,186 @@
   </div>
 </div>
 
-<!-- SNACK BAR -->
-<div class="page" id="page-snackbar">
-  <div class="stats-grid" id="sb-stats"></div>
+<!-- MENU -->
+<div class="page" id="page-menu">
+  <div class="card">
+    <h2 id="menu-form-title">Add Menu Item</h2>
+    <input type="hidden" id="mi-id" />
+    <div class="form-row">
+      <div class="form-group" style="flex:0 0 78px"><label>Icon</label><input type="text" id="mi-emoji" maxlength="2" placeholder="🍔" /></div>
+      <div class="form-group" style="flex:2"><label>Name</label><input type="text" id="mi-name" placeholder="e.g. Cheeseburger" /></div>
+      <div class="form-group" style="flex:0 0 110px"><label>Price ($)</label><input type="number" id="mi-price" step="0.01" min="0" placeholder="8.50" /></div>
+      <div class="form-group"><label>Category</label><input type="text" id="mi-cat" list="mi-cats" placeholder="Grill" /><datalist id="mi-cats"></datalist></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="flex:3"><label>Description (optional)</label><input type="text" id="mi-desc" placeholder="Shown to staff in the POS" /></div>
+      <div class="form-group" style="flex:0 0 auto;justify-content:flex-end">
+        <label style="text-transform:none;font-size:.82rem;color:var(--text);display:flex;align-items:center;gap:7px;font-weight:600">
+          <input type="checkbox" id="mi-taxable" checked style="width:auto" /> Charge sales tax</label>
+      </div>
+      <div class="form-group" style="flex:0 0 auto;justify-content:flex-end">
+        <label style="text-transform:none;font-size:.82rem;color:var(--text);display:flex;align-items:center;gap:7px;font-weight:600">
+          <input type="checkbox" id="mi-active" checked style="width:auto" /> Show in POS</label>
+      </div>
+      <div class="form-group" style="flex:0"><label>&nbsp;</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" id="mi-save" onclick="saveMenuItem()">Add Item</button>
+          <button class="btn" id="mi-cancel" style="background:#f3f4f6;display:none" onclick="resetMenuForm()">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Register Settings</h2>
+    <div class="form-row">
+      <div class="form-group" style="flex:0 0 160px">
+        <label>Sales Tax Rate (%)</label>
+        <input type="number" id="tax-rate" step="0.01" min="0" max="30" />
+      </div>
+      <div class="form-group" style="flex:0"><label>&nbsp;</label>
+        <button class="btn btn-primary" onclick="saveTaxRate()">Save</button></div>
+      <div class="form-group">
+        <label>&nbsp;</label>
+        <p class="range-hint">Applied at checkout to items marked taxable. Maryland is 6%.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Menu <span id="menu-count" style="font-weight:400;color:var(--muted);font-size:.82rem"></span></h2>
+    <div id="menu-list"></div>
+    <div id="menu-seed" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div class="page" id="page-layout">
+  <div class="card">
+    <h2>Deck Layout</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">
+      Click a piece to add it, then drag it into place. Staff see this exact map in the app when they seat guests.</p>
+    <div class="seat-tools" id="seat-tools"></div>
+    <div class="form-row" style="margin-top:14px;align-items:flex-end">
+      <div class="form-group" style="flex:0 0 150px"><label>Add a row of</label>
+        <select id="row-type"><option value="lounger">Loungers</option><option value="chair">Chairs</option><option value="table">Tables</option><option value="cabana">Cabanas</option><option value="daybed">Daybeds</option></select></div>
+      <div class="form-group" style="flex:0 0 100px"><label>How many</label><input type="number" id="row-count" value="8" min="1" max="30" /></div>
+      <div class="form-group" style="flex:0"><label>&nbsp;</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="mgrAddRow(false)">↔ Across</button>
+          <button class="btn btn-primary btn-sm" onclick="mgrAddRow(true)">↕ Down</button>
+          <button class="btn btn-sm" style="background:#f3f4f6" onclick="mgrAddZone()">🏷️ Add zone</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="layout-dirty"></div>
+    <div id="layout-canvas"></div>
+    <div id="layout-sel"></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-success" id="layout-save" onclick="mgrSaveLayout()" disabled>Save Layout</button>
+      <button class="btn" style="background:#f3f4f6" onclick="mgrDiscardLayout()">Discard Changes</button>
+      <button class="btn btn-danger" style="margin-left:auto" onclick="mgrClearLayout()">Clear All</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Live Occupancy</h2>
+    <div id="occ-stats" class="stats-grid"></div>
+    <div id="occ-map"></div>
+    <div class="mgr-legend">
+      <span class="lg"><span class="sw" style="background:var(--deck-open);border-color:var(--deck-open-edge)"></span>Open</span>
+      <span class="lg"><span class="sw" style="background:var(--deck-res);border-color:var(--deck-res-edge)"></span>Reserved</span>
+      <span class="lg"><span class="sw" style="background:var(--deck-act);border-color:var(--deck-act-edge)"></span>Seated</span>
+      <span class="lg"><span class="sw" style="background:#f5333f;border-color:#f5333f;border-radius:50%"></span>Open tab</span>
+    </div>
+    <table style="margin-top:14px">
+      <thead><tr><th>Chair</th><th>Guest</th><th>Party</th><th>Window</th><th>Status</th><th>Seated by</th></tr></thead>
+      <tbody id="occ-rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- KITCHEN -->
+<div class="page" id="page-kitchen">
+  <div class="stats-grid" id="kt-stats"></div>
 
   <div class="card">
     <h2>Kitchen Display</h2>
     <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">
-      Open this on the tablet or TV in the snack bar. Orders your waiters take appear
-      there within seconds, and the status they set shows up on the waiters' phones.</p>
+      Open this on the tablet or TV in the snack bar. Orders your waiters ring up appear
+      there within seconds, and the cook's status shows up on the waiters' phones.</p>
     <div class="qr-url" id="kds-url">Loading…</div>
   </div>
 
   <div class="card">
-    <h2>Live Orders
-      <button class="btn btn-sm btn-primary" style="float:right" onclick="renderSnackbar()">↻ Refresh</button>
+    <h2>On the Pass
+      <button class="btn btn-sm btn-primary" style="float:right" onclick="renderKitchen()">↻ Refresh</button>
     </h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">
+      Every order carries two states: the tab is the money, the kitchen is the food.
+      They move independently — a paid tab can still be waiting on a burger.</p>
     <div style="overflow-x:auto">
       <table>
         <thead><tr><th>#</th><th>Where</th><th>Items</th><th>Waiter</th><th>Placed</th><th>Total</th><th>Tab</th><th>Kitchen</th><th></th></tr></thead>
-        <tbody id="sb-orders"></tbody>
+        <tbody id="kt-orders"></tbody>
       </table>
     </div>
   </div>
+</div>
+
+<!-- SALES -->
+<div class="page" id="page-sales">
+  <div class="card">
+    <h2>Sales Period</h2>
+    <div class="form-row">
+      <div class="form-group" style="flex:0 0 150px"><label>Range</label>
+        <select id="sales-range" onchange="onSalesRange()">
+          <option value="today">Today</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="all">All time</option>
+          <option value="custom">Custom…</option>
+        </select></div>
+      <div class="form-group" id="sales-from-g" style="display:none"><label>From</label><input type="date" id="sales-from" onchange="renderSales()" /></div>
+      <div class="form-group" id="sales-to-g" style="display:none"><label>To</label><input type="date" id="sales-to" onchange="renderSales()" /></div>
+      <div class="form-group" style="flex:0"><label>&nbsp;</label><button class="btn btn-primary" onclick="exportSalesCSV()">Export CSV</button></div>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="sales-stats"></div>
 
   <div class="card">
-    <h2>Menu</h2>
-    <div class="form-row">
-      <div class="form-group" style="flex:2">
-        <label>Item</label>
-        <input type="text" id="mi-name" placeholder="e.g. Veggie Burger" />
-      </div>
-      <div class="form-group">
-        <label>Category</label>
-        <input type="text" id="mi-cat" list="mi-cats" placeholder="Grill" />
-        <datalist id="mi-cats"></datalist>
-      </div>
-      <div class="form-group">
-        <label>Price</label>
-        <input type="number" id="mi-price" step="0.25" min="0" placeholder="0.00" />
-      </div>
-      <div class="form-group" style="flex:0">
-        <label>&nbsp;</label>
-        <button class="btn btn-primary" onclick="addMenuItem()">Add Item</button>
-      </div>
-    </div>
-    <div style="overflow-x:auto">
-      <table>
-        <thead><tr><th>Item</th><th>Category</th><th>Price</th><th>On the menu</th><th></th></tr></thead>
-        <tbody id="sb-menu"></tbody>
-      </table>
-    </div>
+    <h2>Payment Mix</h2>
+    <table><thead><tr><th>Method</th><th>Tickets</th><th>Amount</th><th style="width:35%">Share</th></tr></thead>
+      <tbody id="sales-payments"></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Outstanding Account Charges</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">Charged to a member or house account and not yet collected.</p>
+    <table><thead><tr><th>Account</th><th>When</th><th>Chair</th><th>Amount</th><th>Rung by</th><th></th></tr></thead>
+      <tbody id="sales-accounts"></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Open Tabs</h2>
+    <table><thead><tr><th>Ticket</th><th>Opened</th><th>Items</th><th>Running total</th><th>By</th></tr></thead>
+      <tbody id="sales-tabs"></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Top Sellers</h2>
+    <table><thead><tr><th>Item</th><th>Category</th><th>Qty</th><th>Revenue</th><th style="width:30%"></th></tr></thead>
+      <tbody id="sales-items"></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Sales by Employee</h2>
+    <table><thead><tr><th>Employee</th><th>Tickets</th><th>Revenue</th><th>Avg ticket</th><th>Comps</th></tr></thead>
+      <tbody id="sales-emps"></tbody></table>
   </div>
 </div>
 
@@ -642,11 +827,22 @@ function rerenderActive() {
   const name = active ? active.id.replace('page-', '') : 'chemicals';
   ({ chemicals:renderChemicals, schedule:renderSchedule, timeclock:renderTimeclock,
      employees:renderEmployees, board:renderBoard, reports:renderReports, pools:renderPools,
-     snackbar:renderSnackbar }[name] || (()=>{}))();
+     menu:renderMenu, layout:renderLayout, sales:renderSales,
+     kitchen:renderKitchen }[name] || (()=>{}))();
 }
 function switchPool(id) {
+  if (mgrDirty && !confirm('You have unsaved deck-layout changes for the current pool. Switch anyway and lose them?')) {
+    renderPoolSwitcher();   // snap the dropdown back to the pool we stayed on
+    return;
+  }
   activePoolId = Number(id);
   localStorage.setItem('pm_active_pool', String(activePoolId));
+  // The layout editor is per-pool — drop it so the new pool's deck loads fresh
+  mgrEditor = null; mgrDirty = false;
+  const saveBtn = document.getElementById('layout-save');
+  if (saveBtn) saveBtn.disabled = true;
+  const note = document.getElementById('layout-dirty');
+  if (note) note.innerHTML = '';
   refreshEmpSelects();
   buildQR();
   rerenderActive();
@@ -683,7 +879,11 @@ function showPage(name, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
-  if (btn) btn.classList.add('active');
+  if (btn) {
+    btn.classList.add('active');
+    // With ten tabs the nav can scroll — keep the one you just picked visible
+    btn.scrollIntoView({ block:'nearest', inline:'nearest' });
+  }
   if (name==='chemicals') renderChemicals();
   if (name==='schedule') renderSchedule();
   if (name==='timeclock') renderTimeclock();
@@ -691,13 +891,16 @@ function showPage(name, btn) {
   if (name==='reports') renderReports();
   if (name==='board') renderBoard();
   if (name==='pools') renderPools();
-  if (name==='snackbar') renderSnackbar();
+  if (name==='menu') renderMenu();
+  if (name==='layout') renderLayout();
+  if (name==='sales') renderSales();
+  if (name==='kitchen') renderKitchen();
 }
 
-// Orders move on their own while a manager watches — keep the board honest.
+// Tickets move on their own while a manager watches — keep the board honest.
 setInterval(() => {
-  if (document.getElementById('page-snackbar')?.classList.contains('active')) {
-    renderSnackbar().catch(() => {});
+  if (document.getElementById('page-kitchen')?.classList.contains('active')) {
+    renderKitchen().catch(() => {});
   }
 }, 10000);
 
@@ -1203,7 +1406,7 @@ async function renderTimeclock() {
       ${allFlags.length ? `<ul style="font-size:.8rem;color:#92400e;background:#fef3c7;border-radius:6px;padding:8px 8px 8px 24px;margin-bottom:8px">${allFlags.map(f=>`<li>${f}</li>`).join('')}</ul>` : ''}
       ${Object.keys(ciA).length ? `<details style="font-size:.8rem;margin-bottom:6px"><summary style="cursor:pointer;color:var(--blue)">Clock-in answers</summary><div style="margin-top:6px;padding:8px;background:#f8fafc;border-radius:6px">${Object.entries(ciA).filter(([k])=>k!=='ci_notes').map(([k,v])=>`<div><strong>${k.replace(/_/g,' ')}:</strong> ${v}</div>`).join('')}${ciA.ci_notes?`<div style="margin-top:4px"><em>"${ciA.ci_notes}"</em></div>`:''}</div></details>` : ''}
       ${Object.keys(coA).length ? `<details style="font-size:.8rem;margin-bottom:6px"><summary style="cursor:pointer;color:var(--blue)">Clock-out checklist</summary><div style="margin-top:6px;padding:8px;background:#f8fafc;border-radius:6px">${Object.entries(coA).filter(([k])=>k!=='co_notes').map(([k,v])=>`<div>${v?'✅':'❌'} ${k.replace(/_/g,' ')}</div>`).join('')}${coA.co_notes?`<div style="margin-top:4px"><em>"${coA.co_notes}"</em></div>`:''}</div></details>` : ''}
-      ${photo ? `<details style="font-size:.8rem"><summary style="cursor:pointer;color:var(--blue)">Clock-out photo</summary><img src="/photos/${photo}" style="width:100%;max-width:320px;border-radius:8px;margin-top:6px"/></details>` : ''}
+      ${photo ? `<details style="font-size:.8rem"><summary style="cursor:pointer;color:var(--blue)">Clock-out photo</summary><img src="photos/${photo}" style="width:100%;max-width:320px;border-radius:8px;margin-top:6px"/></details>` : ''}
     </div>`;
   }).join('') : `<p class="empty">No shifts today yet.</p>`;
   document.getElementById('tc-flags').innerHTML = flagHtml;
@@ -1401,12 +1604,407 @@ async function exportCSV() {
   a.download=`pool-chemical-log-${from}-to-${to}.csv`; a.click();
 }
 
-// ── Snack bar ──────────────────────────────────────────────────────────────
-// Managers own the menu and watch the pass; the cooking itself happens on the
-// kitchen display (/kds) and the ordering on the waiters' phones.
-let SB = { orders: [] };
-// An order carries two states at once, so the board shows both: what the guest
-// owes, and where the food is.
+/* ══════════════════════════════════════════════════════════════════════════
+   MENU · DECK LAYOUT · SALES
+   ══════════════════════════════════════════════════════════════════════════ */
+const PD = window.PoolDeck;
+const money = c => PD.money(c);
+
+function mgrMenu()   { return (DB.menu || []).filter(m => Number(m.poolId) === Number(activePoolId)); }
+function mgrLayout() { return (DB.layouts || []).find(l => Number(l.poolId) === Number(activePoolId)) || { seats:[], zones:[] }; }
+function mgrTaxRate(){ return Number(activePool()?.tax_rate || 0); }
+
+/* ── Menu ─────────────────────────────────────────────────────────────── */
+async function renderMenu() {
+  await refresh();
+  const items = mgrMenu();
+  document.getElementById('menu-count').textContent =
+    items.length ? `· ${items.length} item${items.length === 1 ? '' : 's'} · tax ${mgrTaxRate()}%` : '';
+  const taxEl = document.getElementById('tax-rate');
+  if (document.activeElement !== taxEl) taxEl.value = mgrTaxRate();
+
+  const cats = [...new Set(items.map(m => m.category || 'General'))].sort();
+  document.getElementById('mi-cats').innerHTML = cats.map(c => `<option value="${PD.esc(c)}">`).join('');
+
+  const byCat = {};
+  items.forEach(m => (byCat[m.category || 'General'] = byCat[m.category || 'General'] || []).push(m));
+  document.getElementById('menu-list').innerHTML = cats.length ? cats.map(c =>
+    `<div class="menu-cat-h">${PD.esc(c)}</div>` + byCat[c].map(m => `
+      <div class="mrow ${m.active === false ? 'off' : ''}">
+        <div class="em">${m.emoji || '🍽️'}</div>
+        <div class="nm">
+          <b>${PD.esc(m.name)}</b>${m.active === false ? ' <span class="badge badge-warn">HIDDEN</span>' : ''}
+          <div>${m.taxable === false ? 'No sales tax' : 'Taxable'}${m.desc ? ' · ' + PD.esc(m.desc) : ''}</div>
+        </div>
+        <div class="pr">${money(m.price)}</div>
+        <button class="btn btn-sm btn-primary" onclick="editMenuItem(${m.id})">Edit</button>
+        <button class="btn btn-danger" onclick="deleteMenuItem(${m.id})">Delete</button>
+      </div>`).join('')).join('')
+    : '<p class="empty">No menu items yet. Add one above, or load a starter menu below.</p>';
+
+  document.getElementById('menu-seed').innerHTML = items.length ? '' :
+    `<button class="btn btn-primary" onclick="seedMenu()">🍔 Load a starter menu (20 common items)</button>`;
+}
+
+function resetMenuForm() {
+  ['mi-id','mi-emoji','mi-name','mi-price','mi-cat','mi-desc'].forEach(i => document.getElementById(i).value = '');
+  document.getElementById('mi-taxable').checked = true;
+  document.getElementById('mi-active').checked = true;
+  document.getElementById('menu-form-title').textContent = 'Add Menu Item';
+  document.getElementById('mi-save').textContent = 'Add Item';
+  document.getElementById('mi-cancel').style.display = 'none';
+}
+function editMenuItem(id) {
+  const m = mgrMenu().find(x => x.id === id);
+  if (!m) return;
+  document.getElementById('mi-id').value = m.id;
+  document.getElementById('mi-emoji').value = m.emoji || '';
+  document.getElementById('mi-name').value = m.name;
+  document.getElementById('mi-price').value = (m.price / 100).toFixed(2);
+  document.getElementById('mi-cat').value = m.category || '';
+  document.getElementById('mi-desc').value = m.desc || '';
+  document.getElementById('mi-taxable').checked = m.taxable !== false;
+  document.getElementById('mi-active').checked = m.active !== false;
+  document.getElementById('menu-form-title').textContent = 'Edit Menu Item';
+  document.getElementById('mi-save').textContent = 'Save Changes';
+  document.getElementById('mi-cancel').style.display = 'inline-block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+async function saveMenuItem() {
+  const v = i => document.getElementById(i).value;
+  const body = {
+    name: v('mi-name').trim(), price: v('mi-price'), category: v('mi-cat').trim() || 'General',
+    emoji: v('mi-emoji').trim(), desc: v('mi-desc').trim(),
+    taxable: document.getElementById('mi-taxable').checked,
+    active: document.getElementById('mi-active').checked,
+  };
+  if (!body.name) return alert('Give the item a name.');
+  const id = v('mi-id');
+  const res = id ? await api.post('/api/menu/update', { id: Number(id), ...body })
+                 : await api.post('/api/menu', { poolId: Number(activePoolId), ...body });
+  if (!res.ok) return alert(res.error || 'Could not save that item.');
+  resetMenuForm();
+  renderMenu();
+}
+async function deleteMenuItem(id) {
+  const m = mgrMenu().find(x => x.id === id);
+  if (!confirm(`Delete "${m?.name}" from the menu?\n\nPast sales keep their own record of the item, so reports stay accurate.`)) return;
+  await api.post('/api/menu/delete', { id });
+  renderMenu();
+}
+async function saveTaxRate() {
+  const rate = document.getElementById('tax-rate').value;
+  await api.post('/api/pool/update', { id: Number(activePoolId), tax_rate: rate });
+  await refresh();
+  renderMenu();
+}
+async function seedMenu() {
+  if (!confirm('Add 20 common pool snack-bar items? You can edit or delete any of them afterwards.')) return;
+  await api.post('/api/menu/bulk', { poolId: Number(activePoolId), items: PD.STARTER_MENU });
+  renderMenu();
+}
+
+/* ── Deck layout ──────────────────────────────────────────────────────── */
+let mgrEditor = null, mgrDirty = false;
+
+async function renderLayout() {
+  await refresh();
+  // Don't blow away unsaved edits when another render is triggered
+  if (!mgrEditor || !mgrDirty) {
+    document.getElementById('seat-tools').innerHTML = PD.SEAT_ORDER.map(t =>
+      `<button class="seat-tool" onclick="mgrEditor.addSeat('${t}')">${PD.SEAT_META[t].emoji} ${PD.SEAT_META[t].label}</button>`).join('');
+    mgrEditor = new PD.LayoutEditor(document.getElementById('layout-canvas'), mgrLayout(), {
+      onSelect: renderMgrSel,
+      onDirty: () => {
+        mgrDirty = true;
+        document.getElementById('layout-save').disabled = false;
+        document.getElementById('layout-dirty').innerHTML =
+          '<div class="dirty-note">⚠️ Unsaved changes — staff still see the last saved layout until you save.</div>';
+      },
+    });
+    renderMgrSel(null);
+  }
+  renderOccupancy();
+}
+
+function renderMgrSel(sel) {
+  const el = document.getElementById('layout-sel');
+  const c = mgrEditor.counts();
+  if (!sel) {
+    el.innerHTML = `<div class="sel-panel"><h4>Deck</h4>
+      <p style="font-size:.84rem;color:var(--muted)">${c.bookable} bookable chair${c.bookable === 1 ? '' : 's'} ·
+      ${c.total - c.bookable} decor item${c.total - c.bookable === 1 ? '' : 's'} · ${c.zones} zone${c.zones === 1 ? '' : 's'}.
+      Click any piece on the map to rename, rotate or remove it.</p></div>`;
+    return;
+  }
+  const it = sel.item;
+  if (sel.kind === 'seat') {
+    const m = PD.meta(it.type);
+    el.innerHTML = `<div class="sel-panel"><h4>${m.emoji} Selected ${m.label}</h4>
+      <div class="form-row">
+        <div class="form-group"><label>Chair label</label>
+          <input value="${PD.esc(it.label || '')}" oninput="mgrEditor.update('seat',${it.id},{label:this.value})" /></div>
+        <div class="form-group" style="flex:0 0 110px"><label>Seats</label>
+          <input type="number" min="1" max="12" value="${it.cap || 1}" oninput="mgrEditor.update('seat',${it.id},{cap:Number(this.value)||1})" /></div>
+        <div class="form-group" style="flex:0"><label>&nbsp;</label>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" style="background:#f3f4f6" onclick="mgrEditor.update('seat',${it.id},{rot:((${it.rot || 0})+45)%360})">🔄 Rotate</button>
+            <button class="btn btn-sm" style="background:#f3f4f6" onclick="mgrEditor.duplicate('seat',${it.id})">📋 Duplicate</button>
+            <button class="btn btn-danger" onclick="mgrEditor.remove('seat',${it.id})">Delete</button>
+          </div></div>
+      </div></div>`;
+  } else {
+    el.innerHTML = `<div class="sel-panel"><h4>🏷️ Selected zone</h4>
+      <div class="form-row">
+        <div class="form-group"><label>Zone name</label>
+          <input value="${PD.esc(it.name || '')}" oninput="mgrEditor.update('zone',${it.id},{name:this.value})" /></div>
+        <div class="form-group" style="flex:0"><label>Colour</label>
+          <div class="swatches">${PD.ZONE_COLORS.map(c2 =>
+            `<div class="swatch" style="background:${c2}" onclick="mgrEditor.update('zone',${it.id},{color:'${c2}'})"></div>`).join('')}</div></div>
+        <div class="form-group" style="flex:0"><label>&nbsp;</label>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" style="background:#f3f4f6" onclick="mgrEditor.update('zone',${it.id},{shape:'${it.shape === 'pool' ? 'rect' : 'pool'}'})">${it.shape === 'pool' ? '🏷️ Make zone' : '🏊 Make pool'}</button>
+            <button class="btn btn-danger" onclick="mgrEditor.remove('zone',${it.id})">Delete</button>
+          </div></div>
+      </div>
+      <p class="range-hint">Drag the blue corner handle to resize the zone.</p></div>`;
+  }
+}
+
+function mgrAddRow(vertical) {
+  const type = document.getElementById('row-type').value;
+  const count = Math.max(1, Math.min(30, Number(document.getElementById('row-count').value) || 8));
+  mgrEditor.addRow(type, count, { vertical });
+}
+function mgrAddZone() {
+  const name = prompt('Zone name (e.g. "Main Deck", "Shallow End", "Cabanas"):', 'Main Deck');
+  if (name === null) return;
+  const z = mgrEditor.addZone(name.trim() || 'Zone');
+  if (confirm('Make this the pool itself (solid outline instead of a dashed zone)?'))
+    mgrEditor.update('zone', z.id, { shape: 'pool' });
+}
+async function mgrSaveLayout() {
+  const btn = document.getElementById('layout-save');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const res = await api.post('/api/layout', { poolId: Number(activePoolId), ...mgrEditor.toJSON() });
+  btn.textContent = 'Save Layout';
+  if (!res.ok) { btn.disabled = false; return alert(res.error || 'Could not save the layout.'); }
+  mgrDirty = false;
+  document.getElementById('layout-dirty').innerHTML = '';
+  await refresh();
+  renderOccupancy();
+}
+function mgrDiscardLayout() {
+  if (mgrDirty && !confirm('Discard your unsaved layout changes?')) return;
+  mgrEditor.setLayout(mgrLayout());
+  mgrDirty = false;
+  document.getElementById('layout-save').disabled = true;
+  document.getElementById('layout-dirty').innerHTML = '';
+  renderMgrSel(null);
+}
+function mgrClearLayout() {
+  if (!confirm('Remove every chair and zone from this deck?\n\nNothing is saved until you click Save Layout.')) return;
+  mgrEditor.clearAll();
+}
+
+function renderOccupancy() {
+  const layout = mgrLayout();
+  const dateStr = PD.todayStr();
+  const resMap = PD.seatReservationMap(DB.reservations, activePoolId, dateStr);
+  const tabMap = PD.seatTabMap(DB.orders, activePoolId);
+  const occ = PD.occupancy(layout, resMap);
+  const waiting = (DB.waitlist || []).filter(w =>
+    Number(w.poolId) === Number(activePoolId) && w.date === dateStr && w.status === 'waiting').length;
+
+  document.getElementById('occ-stats').innerHTML = `
+    <div class="stat-box"><div class="val" style="color:var(--green)">${occ.open}</div><div class="lbl">Open</div></div>
+    <div class="stat-box"><div class="val" style="color:var(--blue)">${occ.active}</div><div class="lbl">Seated</div></div>
+    <div class="stat-box"><div class="val" style="color:var(--yellow)">${occ.reserved}</div><div class="lbl">Reserved</div></div>
+    <div class="stat-box"><div class="val">${occ.total ? Math.round((occ.active + occ.reserved) / occ.total * 100) : 0}%</div><div class="lbl">Utilisation</div></div>
+    <div class="stat-box"><div class="val" style="color:${waiting ? 'var(--yellow)' : 'inherit'}">${waiting}</div><div class="lbl">Waitlist</div></div>`;
+
+  PD.renderMap(document.getElementById('occ-map'), layout, {
+    seatState: seat => {
+      const r = resMap[seat.id];
+      if (!r) return { status:'open', sub:'', dot: !!tabMap[seat.id] };
+      const sub = r.status === 'reserved' ? PD.fmtHM(r.start) : (r.guestName || '').split(' ')[0];
+      return { status: r.status, sub, dot: !!tabMap[seat.id] };
+    },
+    emptyHTML: '<b>No deck layout yet</b><span>Build it above, then click Save Layout.</span>',
+  });
+
+  const live = PD.liveReservations(DB.reservations, activePoolId, dateStr)
+    .sort((a, b) => (a.seatLabel || '').localeCompare(b.seatLabel || '', undefined, { numeric:true }));
+  document.getElementById('occ-rows').innerHTML = live.length ? live.map(r => `
+    <tr>
+      <td><strong>${PD.esc(r.seatLabel || '—')}</strong></td>
+      <td>${PD.esc(r.guestName)}</td>
+      <td>${r.party}</td>
+      <td>${PD.fmtHM(r.checkedInAt || r.start)}${r.end ? ' – ' + PD.fmtHM(r.end) : ''}</td>
+      <td>${r.status === 'active' ? '<span class="badge badge-pass">SEATED</span>' : '<span class="badge badge-warn">RESERVED</span>'}</td>
+      <td>${PD.esc(r.empName || '—')}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">Nobody on the deck right now.</td></tr>';
+}
+
+/* ── Sales ────────────────────────────────────────────────────────────── */
+function onSalesRange() {
+  const custom = document.getElementById('sales-range').value === 'custom';
+  document.getElementById('sales-from-g').style.display = custom ? 'flex' : 'none';
+  document.getElementById('sales-to-g').style.display = custom ? 'flex' : 'none';
+  if (custom && !document.getElementById('sales-from').value) {
+    const d = new Date(); d.setDate(d.getDate() - 7);
+    document.getElementById('sales-from').value = ymd(d);
+    document.getElementById('sales-to').value = today();
+  }
+  renderSales();
+}
+
+function salesWindow() {
+  const r = document.getElementById('sales-range').value;
+  if (r === 'all') return { from: '0000-00-00', to: '9999-99-99' };
+  if (r === 'custom') return {
+    from: document.getElementById('sales-from').value || '0000-00-00',
+    to: document.getElementById('sales-to').value || '9999-99-99',
+  };
+  if (r === 'today') return { from: today(), to: today() };
+  const d = new Date(); d.setDate(d.getDate() - (Number(r) - 1));
+  return { from: ymd(d), to: today() };
+}
+
+function salesOrders() {
+  const { from, to } = salesWindow();
+  return (DB.orders || []).filter(o =>
+    Number(o.poolId) === Number(activePoolId) && o.status === 'paid' && o.date >= from && o.date <= to);
+}
+
+async function renderSales() {
+  await refresh();
+  const paid = salesOrders();
+  const real = paid.filter(o => o.payment !== 'comp');       // comps aren't revenue
+  const gross = real.reduce((s, o) => s + o.total, 0);
+  const tax = real.reduce((s, o) => s + o.tax, 0);
+  const comps = paid.filter(o => o.payment === 'comp');
+  const compValue = comps.reduce((s, o) => s + o.subtotal, 0);
+
+  document.getElementById('sales-stats').innerHTML = `
+    <div class="stat-box"><div class="val">${money(gross)}</div><div class="lbl">Gross Sales</div></div>
+    <div class="stat-box"><div class="val">${real.length}</div><div class="lbl">Tickets</div></div>
+    <div class="stat-box"><div class="val">${money(real.length ? Math.round(gross / real.length) : 0)}</div><div class="lbl">Avg Ticket</div></div>
+    <div class="stat-box"><div class="val">${money(tax)}</div><div class="lbl">Tax Collected</div></div>
+    <div class="stat-box"><div class="val" style="color:${compValue ? 'var(--yellow)' : 'inherit'}">${money(compValue)}</div><div class="lbl">Comped (${comps.length})</div></div>`;
+
+  // Payment mix
+  const mix = {};
+  paid.forEach(o => {
+    const k = o.payment || 'cash';
+    mix[k] = mix[k] || { n: 0, amt: 0 };
+    mix[k].n++; mix[k].amt += o.payment === 'comp' ? o.subtotal : o.total;
+  });
+  const mixMax = Math.max(1, ...Object.values(mix).map(v => v.amt));
+  document.getElementById('sales-payments').innerHTML = Object.keys(mix).length
+    ? Object.entries(mix).sort((a, b) => b[1].amt - a[1].amt).map(([k, v]) => `
+      <tr>
+        <td><span class="pay-pill ${k}">${PD.PAYMENTS[k]?.emoji || ''} ${PD.PAYMENTS[k]?.label || k}</span></td>
+        <td>${v.n}</td>
+        <td class="money">${money(v.amt)}${k === 'comp' ? ' <span class="range-hint">(not revenue)</span>' : ''}</td>
+        <td><div class="bar-track"><div class="bar-fill" style="width:${v.amt / mixMax * 100}%"></div></div></td>
+      </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">No sales in this period.</td></tr>';
+
+  // Outstanding house-account charges (any period — money still owed is money still owed)
+  const owed = (DB.orders || []).filter(o =>
+    Number(o.poolId) === Number(activePoolId) && o.payment === 'account' && o.status === 'paid' && !o.settled);
+  document.getElementById('sales-accounts').innerHTML = owed.length ? owed.map(o => `
+    <tr>
+      <td><strong>${PD.esc(o.account || '—')}</strong></td>
+      <td>${PD.esc(o.created)}</td>
+      <td>${o.seatLabel ? PD.esc(o.seatLabel) : '—'}</td>
+      <td class="money">${money(o.total)}</td>
+      <td>${PD.esc(o.empName || '—')}</td>
+      <td><button class="btn btn-sm btn-success" onclick="settleOrder(${o.id})">Mark collected</button></td>
+    </tr>`).join('') + `<tr><td colspan="3"><strong>Total outstanding</strong></td>
+      <td class="money"><strong>${money(owed.reduce((s, o) => s + o.total, 0))}</strong></td><td colspan="2"></td></tr>`
+    : '<tr><td colspan="6" class="empty">Nothing outstanding.</td></tr>';
+
+  // Open tabs
+  const tabs = (DB.orders || []).filter(o => Number(o.poolId) === Number(activePoolId) && o.status === 'open');
+  document.getElementById('sales-tabs').innerHTML = tabs.length ? tabs.map(o => `
+    <tr>
+      <td>${o.seatLabel ? '🪑 ' + PD.esc(o.seatLabel) : '🧾 Ticket'}${o.guestName ? ' · ' + PD.esc(o.guestName) : ''}</td>
+      <td>${PD.esc(o.created)}</td>
+      <td>${o.items.map(li => `${li.qty}× ${PD.esc(li.name)}`).join(', ')}</td>
+      <td class="money">${money(o.subtotal + o.tax)}</td>
+      <td>${PD.esc(o.empName || '—')}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">No open tabs.</td></tr>';
+
+  // Top sellers
+  const cat = {};
+  mgrMenu().forEach(m => cat[m.id] = m.category || 'General');
+  const items = {};
+  paid.forEach(o => o.items.forEach(li => {
+    const k = li.name;
+    items[k] = items[k] || { qty: 0, rev: 0, cat: cat[li.menuId] || '—' };
+    items[k].qty += li.qty;
+    items[k].rev += li.total;
+  }));
+  const top = Object.entries(items).sort((a, b) => b[1].rev - a[1].rev);
+  const topMax = Math.max(1, ...top.map(([, v]) => v.rev));
+  document.getElementById('sales-items').innerHTML = top.length ? top.map(([n, v]) => `
+    <tr>
+      <td><strong>${PD.esc(n)}</strong></td>
+      <td>${PD.esc(v.cat)}</td>
+      <td>${v.qty}</td>
+      <td class="money">${money(v.rev)}</td>
+      <td><div class="bar-track"><div class="bar-fill" style="width:${v.rev / topMax * 100}%"></div></div></td>
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">No sales in this period.</td></tr>';
+
+  // By employee
+  const emps = {};
+  paid.forEach(o => {
+    const k = o.empName || '—';
+    emps[k] = emps[k] || { n: 0, rev: 0, comp: 0 };
+    if (o.payment === 'comp') { emps[k].comp += o.subtotal; }
+    else { emps[k].n++; emps[k].rev += o.total; }
+  });
+  const rows = Object.entries(emps).sort((a, b) => b[1].rev - a[1].rev);
+  document.getElementById('sales-emps').innerHTML = rows.length ? rows.map(([n, v]) => `
+    <tr>
+      <td><strong>${PD.esc(n)}</strong></td>
+      <td>${v.n}</td>
+      <td class="money">${money(v.rev)}</td>
+      <td class="money">${money(v.n ? Math.round(v.rev / v.n) : 0)}</td>
+      <td class="money">${v.comp ? money(v.comp) : '—'}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">No sales in this period.</td></tr>';
+}
+
+async function settleOrder(id) {
+  if (!confirm('Mark this account charge as collected?')) return;
+  await api.post('/api/order/settle', { id, settled: true });
+  renderSales();
+}
+
+function exportSalesCSV() {
+  const { from, to } = salesWindow();
+  const orders = (DB.orders || []).filter(o =>
+    Number(o.poolId) === Number(activePoolId) && o.date >= from && o.date <= to);
+  const header = 'Date,Time,Ticket,Status,Payment,Account,Chair,Item,Qty,Unit Price,Line Total,Subtotal,Tax,Tip,Order Total,Rung By\n';
+  const rows = orders.flatMap(o => o.items.map(li => [
+    o.date, (o.created || '').slice(11), o.id, o.status, o.payment, `"${(o.account || '').replace(/"/g, '""')}"`,
+    o.seatLabel || '', `"${li.name.replace(/"/g, '""')}"`, li.qty,
+    (li.price / 100).toFixed(2), (li.total / 100).toFixed(2),
+    (o.subtotal / 100).toFixed(2), (o.tax / 100).toFixed(2), ((o.tip || 0) / 100).toFixed(2),
+    (o.total / 100).toFixed(2), `"${(o.empName || '').replace(/"/g, '""')}"`,
+  ].join(','))).join('\n');
+  const blob = new Blob([header + rows], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `pool-sales-${from}-to-${to}.csv`;
+  a.click();
+}
+
+// ── Kitchen ────────────────────────────────────────────────────────────────
+// The menu lives on the Menu page and the takings on Sales; this page is only
+// about the food in flight — the half neither of those can see.
 const PAY_LOOK = {
   open: ['Tab open', '#fef3c7', '#92400e'],
   paid: ['Paid',     '#dcfce7', '#065f46'],
@@ -1418,105 +2016,58 @@ const KITCHEN_LOOK = {
   ready:     ['Ready',   '#dcfce7', '#065f46'],
   served:    ['Served',  '#f1f5f9', '#475569'],
 };
-const dollars = cents => `$${((cents || 0) / 100).toFixed(2)}`;
-const escM = s => String(s ?? '').replace(/[&<>"']/g, c =>
+const escK = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-async function renderSnackbar() {
+async function renderKitchen() {
   document.getElementById('kds-url').textContent = `${location.origin}/kds`;
+  let orders = [];
   try {
-    SB = await (await fetch(`/api/orders?poolId=${activePoolId}`)).json();
+    orders = (await (await fetch(`/api/orders?poolId=${activePoolId}`)).json()).orders || [];
   } catch (e) {
-    document.getElementById('sb-orders').innerHTML = `<tr><td colspan="8" class="empty">Can't reach the server.</td></tr>`;
+    document.getElementById('kt-orders').innerHTML =
+      `<tr><td colspan="9" class="empty">Can't reach the server.</td></tr>`;
     return;
   }
-  const orders = SB.orders || [];
-  const menu = (DB.menu || []).filter(inPool);
 
-  // Today's numbers. Prep time is measured on tickets that actually reached the pass.
-  const counted = orders.filter(o => o.status !== 'void');
-  const revenue = counted.reduce((s, o) => s + (o.total || 0), 0);
-  const items   = counted.reduce((s, o) => s + o.items.reduce((n, i) => n + i.qty, 0), 0);
-  const timed   = orders.filter(o => o.readyTs && o.createdTs);
-  const avgMin  = timed.length
+  const live  = orders.filter(o => o.status !== 'void' && ['new','preparing','ready'].includes(o.kitchen));
+  const timed = orders.filter(o => o.readyTs && o.createdTs);
+  const avgMin = timed.length
     ? (timed.reduce((s, o) => s + (o.readyTs - o.createdTs), 0) / timed.length / 60000) : null;
-  const cooking = orders.filter(o => o.status !== 'void' &&
-    ['new','preparing','ready'].includes(o.kitchen)).length;
-  const owed = orders.filter(o => o.status === 'open' || (o.status === 'paid' && !o.settled))
-    .reduce((s, o) => s + (o.total || 0), 0);
-  document.getElementById('sb-stats').innerHTML = `
-    <div class="stat-box"><div class="val">${counted.length}</div><div class="lbl">Orders Today</div></div>
-    <div class="stat-box"><div class="val">${items}</div><div class="lbl">Items Sold</div></div>
-    <div class="stat-box"><div class="val">${dollars(revenue)}</div><div class="lbl">Revenue</div></div>
+  // The one number a manager actually acts on: how long the oldest ticket has waited
+  const oldest = live.length
+    ? Math.floor((Date.now() - Math.min(...live.map(o => o.createdTs || Date.now()))) / 60000) : 0;
+  document.getElementById('kt-stats').innerHTML = `
+    <div class="stat-box"><div class="val">${live.filter(o => o.kitchen === 'new').length}</div><div class="lbl">Waiting</div></div>
+    <div class="stat-box"><div class="val">${live.filter(o => o.kitchen === 'preparing').length}</div><div class="lbl">Cooking</div></div>
+    <div class="stat-box"><div class="val">${live.filter(o => o.kitchen === 'ready').length}</div><div class="lbl">On the Pass</div></div>
     <div class="stat-box"><div class="val">${avgMin == null ? '—' : avgMin.toFixed(1)}</div><div class="lbl">Avg Min to Ready</div></div>
-    <div class="stat-box"><div class="val">${cooking}</div><div class="lbl">In the Kitchen</div></div>
-    <div class="stat-box"><div class="val">${dollars(owed)}</div><div class="lbl">Uncollected</div></div>`;
+    <div class="stat-box"><div class="val">${oldest}</div><div class="lbl">Oldest Ticket (min)</div></div>`;
 
-  // Live orders — newest first, since a manager scans the top of the list
-  const rows = [...orders].reverse();
-  document.getElementById('sb-orders').innerHTML = rows.length ? rows.map(o => {
+  const rows = [...orders].reverse();   // newest first — a manager scans the top
+  document.getElementById('kt-orders').innerHTML = rows.length ? rows.map(o => {
     const [pl, pbg, pfg] = PAY_LOOK[o.status] || PAY_LOOK.open;
     const k = KITCHEN_LOOK[o.kitchen];
-    const where = o.seatLabel || o.guestName || 'Walk-up';
     return `<tr>
       <td><b>${o.num ?? '—'}</b></td>
-      <td>${escM(where)}</td>
-      <td style="font-size:.8rem">${o.items.map(i => `${i.qty}× ${escM(i.name)}`).join(', ')}</td>
-      <td>${escM(o.empName || '—')}</td>
+      <td>${escK(o.seatLabel || o.guestName || 'Walk-up')}</td>
+      <td style="font-size:.8rem">${o.items.map(i => `${i.qty}× ${escK(i.name)}`).join(', ')}</td>
+      <td>${escK(o.empName || '—')}</td>
       <td>${fmtTime((o.created || '').slice(11)) || '—'}</td>
-      <td>${dollars(o.total)}</td>
+      <td>${money(o.total)}</td>
       <td><span class="badge" style="background:${pbg};color:${pfg}">${pl}</span></td>
       <td>${o.status === 'void' || !k ? '—'
         : `<span class="badge" style="background:${k[1]};color:${k[2]}">${k[0]}</span>`}</td>
       <td>${o.status === 'void' ? '' :
-        `<button class="btn btn-danger btn-sm" onclick="voidOrder(${o.id},${o.num})">Void</button>`}</td>
+        `<button class="btn btn-danger btn-sm" onclick="voidKitchenOrder(${o.id},${o.num})">Void</button>`}</td>
     </tr>`;
   }).join('') : `<tr><td colspan="9" class="empty">No orders today.</td></tr>`;
-
-  // Menu
-  document.getElementById('mi-cats').innerHTML =
-    [...new Set(menu.map(m => m.category))].map(c => `<option value="${escM(c)}">`).join('');
-  document.getElementById('sb-menu').innerHTML = menu.length ? menu.map(m => `
-    <tr>
-      <td><input type="text" value="${escM(m.name)}" style="border:none;background:none;font-weight:600;padding:2px"
-        onchange="updateMenuItem(${m.id},'name',this.value)"/></td>
-      <td><input type="text" value="${escM(m.category)}" list="mi-cats" style="border:none;background:none;padding:2px;width:110px"
-        onchange="updateMenuItem(${m.id},'category',this.value)"/></td>
-      <td><input type="number" step="0.25" min="0" value="${((m.price || 0) / 100).toFixed(2)}"
-        style="border:none;background:none;padding:2px;width:80px"
-        onchange="updateMenuItem(${m.id},'price',this.value)"/></td>
-      <td><input type="checkbox" ${m.active !== false ? 'checked' : ''} style="width:auto"
-        onchange="updateMenuItem(${m.id},'active',this.checked)"/></td>
-      <td><button class="btn btn-danger btn-sm" onclick="deleteMenuItem(${m.id},'${escM(m.name).replace(/'/g,"\\'")}')">Delete</button></td>
-    </tr>`).join('') : `<tr><td colspan="5" class="empty">No menu items yet.</td></tr>`;
 }
 
-async function addMenuItem() {
-  const name = document.getElementById('mi-name').value.trim();
-  if (!name) return alert('Give the item a name.');
-  await api.post('/api/menu', {
-    poolId: activePoolId, name,
-    category: document.getElementById('mi-cat').value.trim() || 'Snacks',
-    price: document.getElementById('mi-price').value || 0,
-  });
-  ['mi-name','mi-cat','mi-price'].forEach(id => document.getElementById(id).value = '');
-  renderSnackbar();
-}
-async function updateMenuItem(id, field, value) {
-  await api.post('/api/menu/update', {id, [field]: value});
-  await refresh();          // menu lives in the main record, not the orders feed
-  renderSnackbar();
-}
-async function deleteMenuItem(id, name) {
-  if (!confirm(`Remove "${name}" from the menu? Past orders keep it.`)) return;
-  await api.post('/api/menu/delete', {id});
-  await refresh();
-  renderSnackbar();
-}
-async function voidOrder(id, num) {
+async function voidKitchenOrder(id, num) {
   if (!confirm(`Void order #${num}? It comes off the kitchen board and stops being billed.`)) return;
   await api.post('/api/order/void', {id, reason: 'Voided by management'});
-  renderSnackbar();
+  renderKitchen();
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────

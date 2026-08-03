@@ -3,6 +3,10 @@
 Everything it takes to run a swim club, in one small Python server and two web apps —
 a desktop console for management and a phone-first PWA for the guards on deck.
 
+**▶ [Try the live demo](https://jedlavitch.github.io/Pool-Management/)** — both apps, fully
+populated, no login. Everyone in it is invented; the club's real data never leaves its own
+server.
+
 No frameworks, no build step, no database. `server.py` is pure Python standard library,
 the apps are single HTML files, and all state lives in one `data.json`.
 
@@ -51,10 +55,28 @@ resolves its own LAN IP and `.local` hostname so you don't have to look either o
 | `pos-shared.js` | Deck-map renderer + money/seat helpers shared by both apps |
 | `sw.js`, `manifest.json` | Service worker and manifest that make the staff app installable |
 | `data.json` | All state. Gitignored — it's live data, not source |
+| `index.html` | Landing page for the hosted demo (the server routes `/` to management) |
+| `demo-data.js`, `demo-mode.js` | The static demo — see below |
 
 Seat coordinates live in a fixed 1000×700 design space and render as percentages, so one
 saved layout scales to any screen without re-saving. Money is stored in whole cents
 everywhere; dollars only exist for display.
+
+## The demo build
+
+Both apps are ordinary HTML that talks to `server.py` over `fetch`. On GitHub Pages there is
+no server, so `demo-mode.js` patches `fetch` and answers the same API out of an in-browser
+dataset — the apps themselves are unchanged and don't know the difference.
+
+It stays out of the way in production. On a host that answers `/api/data` it hands the real
+response straight through and disables itself for the session; only a 404-with-no-JSON (a
+static host) or an outright connection failure flips it into demo mode. Writes go to
+`localStorage`, so a visitor can ring up an order or clock someone in and watch it stick,
+on their machine only.
+
+`demo-data.js` is entirely fabricated staff, punches, and shifts. The deck layout and the
+snack-bar menu are copied from the real config — those are furniture positions and burger
+prices, not personal data. To reset, clear the site's storage or run `MAL_DEMO.reset()`.
 
 ## Deploying
 

@@ -29,7 +29,7 @@ function parseMoney(str) {
    w/h are the footprint in design units. `bookable:false` means it's deck
    furniture guests aren't seated at (umbrellas, planters, signs). */
 const SEAT_META = {
-  lounger:  { w: 34, h: 62, r: 8,   emoji: '🛋️', label: 'Lounger',  bookable: true,  cap: 1 },
+  lounger:  { w: 40, h: 62, r: 8,   emoji: '🛋️', label: 'Lounger',  bookable: true,  cap: 1 },
   chair:    { w: 36, h: 36, r: 7,   emoji: '🪑', label: 'Chair',    bookable: true,  cap: 1 },
   daybed:   { w: 70, h: 58, r: 10,  emoji: '🛏️', label: 'Daybed',   bookable: true,  cap: 2 },
   table:    { w: 46, h: 46, r: 999, emoji: '🍽️', label: 'Table',    bookable: true,  cap: 4 },
@@ -56,7 +56,7 @@ const STATUS_STYLE = {
 
 /* ── One-time stylesheet injection ───────────────────────────────────────*/
 const CSS = `
-.pd-wrap{position:relative;width:100%;aspect-ratio:${DW}/${DH};background:var(--deck-bg,#f8fafc);
+.pd-wrap{position:relative;width:100%;aspect-ratio:${DW}/${DH};container-type:inline-size;background:var(--deck-bg,#f8fafc);
   border:1px solid var(--deck-border,#e2e8f0);border-radius:12px;overflow:hidden;touch-action:none;
   background-image:radial-gradient(circle at 1px 1px,var(--deck-dot,#e2e8f0) 1px,transparent 0);
   background-size:calc(100%/20) calc(100%/14);user-select:none;-webkit-user-select:none;}
@@ -70,9 +70,12 @@ const CSS = `
   font-weight:800;line-height:1;overflow:hidden;transition:box-shadow .12s,filter .12s;}
 .pd-seat.tappable{cursor:pointer;}
 .pd-seat.tappable:hover{filter:brightness(.96);}
-.pd-seat-lbl{font-size:.58rem;letter-spacing:-.02em;}
-.pd-seat-ico{font-size:.7rem;line-height:1;}
-.pd-seat-sub{font-size:.5rem;font-weight:700;opacity:.85;max-width:96%;overflow:hidden;
+/* Label/icon sizing tracks the canvas width (cqw) so a 3-character chair number
+   like "A16" fits on a phone-width map and still reads on a desktop one. */
+.pd-seat-lbl{font-size:clamp(5px,1.7cqw,12px);letter-spacing:-.04em;max-width:98%;
+  overflow:hidden;text-overflow:clip;white-space:nowrap;}
+.pd-seat-ico{font-size:clamp(7px,2cqw,15px);line-height:1;}
+.pd-seat-sub{font-size:clamp(4px,1.35cqw,9px);font-weight:700;opacity:.85;max-width:96%;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;}
 .pd-seat-dot{position:absolute;top:2px;right:2px;width:9px;height:9px;border-radius:50%;
   background:#f5333f;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.12);}
