@@ -493,8 +493,7 @@ function looksServerless(res) {
 
 function activateDemo(why) {
   mode = 'demo';
-  console.info('[demo] no API found (' + why + ') — serving the built-in demo dataset.');
-  addBanner();
+  console.info('[demo] no API found (' + why + ') — serving the built-in dataset.');
 }
 
 /* ── The patch ───────────────────────────────────────────────────────────*/
@@ -518,82 +517,6 @@ global.fetch = function (input, init) {
     return serveLocally(path, method, init);
   });
 };
-
-/* ── Banner ──────────────────────────────────────────────────────────────
-   Says what this is without covering the UI it is describing. */
-/* How far down the page does the app's own fixed/sticky header reach?
-   Both apps also park full-height drawers (notifications, modals) at top:0,
-   so height is capped as well — a header is a strip, not a panel. */
-function dockedHeaderBottom() {
-  let bottom = 0;
-  document.querySelectorAll('body > *').forEach(el => {
-    const cs = getComputedStyle(el);
-    if (cs.position !== 'fixed' && cs.position !== 'sticky') return;
-    if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return;
-    const r = el.getBoundingClientRect();
-    const isStrip = r.height > 0 && r.height < global.innerHeight * 0.35;
-    const spansWidth = r.width > global.innerWidth * 0.5;
-    if (r.top <= 2 && isStrip && spansWidth) bottom = Math.max(bottom, r.bottom);
-  });
-  return bottom;
-}
-
-function addBanner() {
-  // May fire before the body exists, since the API probe can settle early.
-  if (!document.body) {
-    document.addEventListener('DOMContentLoaded', addBanner, { once: true });
-    return;
-  }
-  if (document.getElementById('demo-banner')) return;
-
-  const bar = document.createElement('div');
-  bar.id = 'demo-banner';
-  bar.innerHTML =
-    '<span>Demo data — saved in this browser</span>' +
-    '<button type="button" data-act="reset">Reset</button>' +
-    '<button type="button" data-act="hide" aria-label="Hide">&times;</button>';
-
-  const s = bar.style;
-  s.position = 'fixed'; s.left = '50%'; s.transform = 'translateX(-50%)';
-  s.zIndex = '2147483647';
-  s.display = 'flex'; s.alignItems = 'center'; s.gap = '8px';
-  s.padding = '6px 8px 6px 14px'; s.borderRadius = '999px';
-  s.background = 'rgba(15,23,42,.94)'; s.color = '#fff';
-  s.font = '500 12px/1.2 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif';
-  s.boxShadow = '0 6px 24px rgba(0,0,0,.3)'; s.backdropFilter = 'blur(8px)';
-  s.whiteSpace = 'nowrap'; s.maxWidth = 'calc(100vw - 16px)';
-  s.transition = 'opacity .4s ease';
-
-  // Anchor below whatever the app docks at the top. The bottom is off limits:
-  // the staff app parks a tab bar and a cart bar down there, and covering the
-  // checkout button is worse than covering a line of scrollable text.
-  s.top = (dockedHeaderBottom() + 10) + 'px';
-
-  bar.querySelectorAll('button').forEach(btn => {
-    const bs = btn.style;
-    bs.border = '0'; bs.borderRadius = '999px'; bs.cursor = 'pointer';
-    bs.fontFamily = 'inherit'; bs.fontWeight = '700'; bs.fontSize = '12px';
-    bs.flexShrink = '0';
-    if (btn.dataset.act === 'reset') {
-      bs.padding = '5px 11px'; bs.background = '#38bdf8'; bs.color = '#04293d';
-      btn.addEventListener('click', resetDemo);
-    } else {
-      bs.padding = '5px 9px'; bs.background = 'transparent'; bs.color = '#94a3b8';
-      bs.fontSize = '15px'; bs.lineHeight = '1';
-      btn.addEventListener('click', () => bar.remove());
-    }
-  });
-
-  document.body.appendChild(bar);
-
-  // Say it once and get out of the way — it is a notice, not furniture.
-  setTimeout(() => {
-    bar.style.opacity = '0';
-    setTimeout(() => bar.remove(), 500);
-  }, 5000);
-}
-
-if (mode === 'demo') addBanner();
 
 global.MAL_DEMO = { reset: resetDemo, state: () => data, mode: () => mode };
 
