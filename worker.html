@@ -1197,9 +1197,30 @@ function switchPool() {
 }
 
 // ══ API ════════════════════════════════════════════════════════════════════
-const get  = async () => (await fetch('/api/data')).json();
+// A session can lapse while the app is open. Rather than let every panel go
+// quietly blank, drop straight back to the sign-in list.
+function onSessionLost() {
+  if (document.getElementById('screen-name').classList.contains('active')) return;
+  empId = null; empName = null;
+  localStorage.removeItem('pm_worker_id');
+  localStorage.removeItem('pm_worker_name');
+  loadNameList();
+  show('name');
+}
+async function apiFetch(path, options) {
+  const res = await fetch(path, options);
+  if (res.status === 401) { onSessionLost(); throw new Error('Signed out'); }
+  // A refusal on grounds of rank used to be as quiet as a lapsed session: the
+  // button did nothing and said nothing. Say it, since no caller does.
+  if (res.status === 403) {
+    const body = await res.clone().json().catch(() => ({}));
+    alert(body.error || "You don't have permission to do that — ask a manager.");
+  }
+  return res;
+}
+const get  = async () => (await apiFetch('/api/data')).json();
 const post = async (path, body) =>
-  (await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})).json();
+  (await apiFetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})).json();
 
 // ══ Utilities ══════════════════════════════════════════════════════════════
 // Local-date formatter — must match the server's local date (NOT UTC), otherwise
@@ -1826,7 +1847,9 @@ function renderMyRequests(data) {
 
 // ══ Name list ════════════════════════════════════════════════════════════════
 async function loadNameList() {
-  const data = await get();
+  // Before sign-in the full dataset is off limits, so the picker comes from
+  // /api/roster — names and roles only.
+  const data = await (await fetch('/api/roster')).json();
   const list = document.getElementById('name-list');
   if (!data.employees || !data.employees.length) {
     list.innerHTML = '<p class="empty">No employees set up yet. Ask your manager.</p>';
@@ -2244,7 +2267,9 @@ let cashTendered = 0;
 let editor = null;                // PoolDeck.LayoutEditor instance
 let layoutDirty = false;
 
-const MGR_ROLES = ['Manager', 'Owner', 'Pool Owner'];
+// Mirrors MANAGEMENT_ROLES in server.py — the server is the one enforcing it,
+// so any drift here shows staff buttons that fail with "permission required".
+const MGR_ROLES = ['Pool Owner', 'Owner', 'Manager', 'Staffer'];
 function me() { return (posDB?.employees || []).find(e => String(e.id) === String(empId)) || null; }
 function isManager() { return MGR_ROLES.includes(me()?.role); }
 function myPool() { return (posDB?.pools || []).find(p => Number(p.id) === Number(activePoolId)) || null; }
@@ -2609,7 +2634,7 @@ function renderOpenTabs() {
       <div class="tab-card-items">${o.items.map(li => `${li.qty}× ${PD.esc(li.name)}`).join(' · ')}</div>
       <div class="tab-card-btns">
         <button class="go" onclick="payExistingTab(${o.id})">💳 Close out</button>
-        <button onclick="voidOrder(${o.id})">Void</button>
+        ${isManager() ? `<button onclick="voidOrder(${o.id})">Void</button>` : ''}
       </div>
     </div>`).join('') : '<p class="empty">No open tabs. Held orders show up here.</p>';
 }
@@ -2617,7 +2642,8 @@ function renderOpenTabs() {
 async function voidOrder(id) {
   const reason = prompt('Void this ticket — reason?', 'rung in error');
   if (reason === null) return;
-  await post('/api/order/void', { id, reason });
+  const res = await post('/api/order/void', { id, reason });
+  if (res && res.ok === false) return;   // apiFetch already explained the refusal
   renderPos();
 }
 
@@ -2936,9 +2962,16 @@ async function init() {
     // Skipped on a static host — the cache list points at server routes.
     if (!window.MAL_STATIC_HOST) navigator.serviceWorker.register('sw.js').catch(()=>{});
   }
+  // Remembering the name isn't the same as still being signed in — sessions
+  // expire. Ask the server before trusting it, or a returning guard lands on
+  // a home screen that can't load anything.
   const savedId = localStorage.getItem('pm_worker_id');
   const savedName = localStorage.getItem('pm_worker_name');
+  let sessionLives = false;
   if (savedId && savedName) {
+    try { sessionLives = (await fetch('/api/me')).ok; } catch (e) { sessionLives = false; }
+  }
+  if (sessionLives) {
     empId = savedId; empName = savedName;
     await afterLogin();
   } else {

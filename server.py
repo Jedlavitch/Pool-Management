@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os, socket, threading
+import json, os, socket, threading, hashlib, hmac, base64, secrets, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 from datetime import datetime
@@ -15,6 +15,126 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR   = os.environ.get('DATA_DIR', _HERE)
 DATA_FILE  = os.path.join(DATA_DIR, 'data.json')
 PHOTOS_DIR = os.path.join(DATA_DIR, 'photos')
+
+# ══ Authentication ═════════════════════════════════════════════════════════
+# Everything past the sign-in screen is staff data — names, phone numbers,
+# hours, sales. None of it should be one URL away once this is on the public
+# internet, so the API checks a session on every request instead of trusting
+# the browser to have shown a login screen.
+
+SESSION_DAYS = 7
+COOKIE_NAME = 'mal_session'
+
+# Set by Railway (and by hand elsewhere) — its presence is how we know this
+# instance is reachable from outside the pool's own network.
+PUBLIC_HOST = os.environ.get('RAILWAY_PUBLIC_DOMAIN') or os.environ.get('PUBLIC_DOMAIN') or ''
+IS_PUBLIC = bool(PUBLIC_HOST)
+
+# Escape hatch for a fresh public deploy, where nobody has a password yet.
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')
+
+
+def _load_secret():
+    """Key that signs session tokens. From the environment when provided,
+    otherwise generated once and kept beside the data (gitignored). Rotating
+    it just signs everyone out."""
+    env = os.environ.get('SECRET_KEY')
+    if env:
+        return env.encode()
+    path = os.path.join(DATA_DIR, '.secret')
+    try:
+        with open(path, 'rb') as f:
+            saved = f.read().strip()
+            if saved:
+                return saved
+    except OSError:
+        pass
+    generated = base64.urlsafe_b64encode(secrets.token_bytes(32))
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+        with open(path, 'wb') as f:
+            f.write(generated)
+        os.chmod(path, 0o600)
+    except OSError:
+        # Read-only disk: fall back to a per-boot key. Sessions won't survive
+        # a restart, which is inconvenient but not insecure.
+        pass
+    return generated
+
+
+SECRET = _load_secret()
+PBKDF2_ROUNDS = 200_000
+
+
+def hash_password(pw):
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac('sha256', pw.encode(), salt, PBKDF2_ROUNDS)
+    return 'pbkdf2${}${}${}'.format(
+        PBKDF2_ROUNDS, base64.b64encode(salt).decode(), base64.b64encode(dk).decode())
+
+
+def verify_password(pw, stored):
+    """Accepts both the hashed form and the plaintext left over from before
+    hashing existed, so nobody is locked out by the upgrade."""
+    if not stored:
+        return False
+    if stored.startswith('pbkdf2$'):
+        try:
+            _, rounds, salt_b64, hash_b64 = stored.split('$')
+            dk = hashlib.pbkdf2_hmac('sha256', pw.encode(), base64.b64decode(salt_b64), int(rounds))
+            return hmac.compare_digest(dk, base64.b64decode(hash_b64))
+        except Exception:
+            return False
+    return hmac.compare_digest(pw, stored)
+
+
+def is_legacy_password(stored):
+    return bool(stored) and not stored.startswith('pbkdf2$')
+
+
+def make_token(emp_id):
+    exp = int(time.time()) + SESSION_DAYS * 86400
+    msg = '{}:{}'.format(emp_id, exp)
+    sig = hmac.new(SECRET, msg.encode(), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode('{}:{}'.format(msg, sig).encode()).decode().rstrip('=')
+
+
+def read_token(token):
+    """Return the employee id a token vouches for, or None."""
+    try:
+        padded = token + '=' * (-len(token) % 4)
+        raw = base64.urlsafe_b64decode(padded.encode()).decode()
+        emp_id, exp, sig = raw.rsplit(':', 2)
+        expect = hmac.new(SECRET, '{}:{}'.format(emp_id, exp).encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expect):
+            return None
+        if int(exp) < time.time():
+            return None
+        return emp_id
+    except Exception:
+        return None
+
+
+# Must stay in step with MGR_ROLES in worker.html, or the app offers buttons the
+# server then refuses. "Pool Owner" is the most senior role staff can be given,
+# so leaving it out locked the owner out of their own club's management.
+MANAGEMENT_ROLES = ('Pool Owner', 'Owner', 'Manager', 'Staffer')
+
+# Reachable without a session: the sign-in screen needs the name list, and the
+# login call itself obviously can't require being logged in.
+PUBLIC_API = ('/api/roster', '/api/auth', '/api/logout')
+
+# Routes that change who can get in, or expose the whole club at once.
+MANAGEMENT_API = (
+    '/api/employee', '/api/employee/delete', '/api/employee/pools',
+    '/api/employee/set-password', '/api/pool', '/api/pool/update',
+    '/api/pool/delete', '/api/announcement', '/api/announcement/delete',
+    '/api/resource', '/api/resource/delete', '/api/shift', '/api/shift/delete',
+    '/api/shifts/bulk', '/api/menu', '/api/menu/update', '/api/menu/delete',
+    '/api/menu/bulk', '/api/layout', '/api/notification/send',
+    '/api/order/void', '/api/order/delete', '/api/order/settle',
+)
+
 
 def get_mdns_host():
     """Return stable .local mDNS hostname — never changes regardless of IP."""
@@ -225,11 +345,71 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 
-    def send_json(self, data, status=200):
+    # ── Session helpers ────────────────────────────────────────────────────
+    def session_token(self):
+        for part in (self.headers.get('Cookie') or '').split(';'):
+            name, _, value = part.strip().partition('=')
+            if name == COOKIE_NAME and value:
+                return value
+        auth = self.headers.get('Authorization') or ''
+        if auth.startswith('Bearer '):
+            return auth[7:].strip()
+        return None
+
+    def current_user(self):
+        """The signed-in employee, or None. Cached per request."""
+        if hasattr(self, '_user_cache'):
+            return self._user_cache
+        user = None
+        token = self.session_token()
+        emp_id = read_token(token) if token else None
+        if emp_id == 'admin':
+            user = {'id': 'admin', 'name': 'Administrator', 'role': 'Owner'}
+        elif emp_id:
+            user = next((e for e in load_data().get('employees', [])
+                         if str(e['id']) == emp_id), None)
+        self._user_cache = user
+        return user
+
+    def set_session_cookie(self, emp_id):
+        token = make_token(emp_id)
+        bits = [
+            '{}={}'.format(COOKIE_NAME, token),
+            'Path=/',
+            'Max-Age={}'.format(SESSION_DAYS * 86400),
+            'HttpOnly',            # keeps it out of reach of page scripts
+            'SameSite=Lax',
+        ]
+        if IS_PUBLIC:
+            bits.append('Secure')  # HTTPS-only once it's on the internet
+        self.send_header('Set-Cookie', '; '.join(bits))
+
+    def clear_session_cookie(self):
+        self.send_header('Set-Cookie',
+                         '{}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax'.format(COOKIE_NAME))
+
+    def require_session(self, path):
+        """True if the request may proceed. Writes the refusal itself if not."""
+        if path in PUBLIC_API:
+            return True
+        user = self.current_user()
+        if not user:
+            self.send_json({'ok': False, 'error': 'Sign in required'}, 401)
+            return False
+        if path in MANAGEMENT_API and user.get('role') not in MANAGEMENT_ROLES:
+            self.send_json({'ok': False, 'error': 'Management access required'}, 403)
+            return False
+        return True
+
+    def send_json(self, data, status=200, session=None, end_session=False):
         body = json.dumps(data).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', len(body))
+        if session is not None:
+            self.set_session_cookie(session)
+        if end_session:
+            self.clear_session_cookie()
         self.cors()
         self.end_headers()
         self.wfile.write(body)
@@ -239,6 +419,33 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         p = urlparse(self.path).path
+
+        # The pages themselves are just shells — they show a sign-in screen and
+        # can't render anything until the API hands them data, so only the API
+        # needs guarding here.
+        if p.startswith('/api/') and not self.require_session(p):
+            return
+
+        if p == '/api/roster':
+            # Deliberately thin: enough to draw the "who are you?" picker and
+            # nothing more. No phones, no hours, no punches.
+            d = load_data()
+            self.send_json({
+                'employees': [{'id': e['id'], 'name': e.get('name', ''),
+                               'role': e.get('role', ''),
+                               'has_password': bool(e.get('password'))}
+                              for e in d.get('employees', [])],
+                'signed_in': bool(self.current_user()),
+                'requires_password': IS_PUBLIC,
+            })
+            return
+
+        if p == '/api/me':
+            u = self.current_user()
+            self.send_json({'ok': True, 'id': u.get('id'), 'name': u.get('name', ''),
+                            'role': u.get('role', '')})
+            return
+
         if p in ('/', '/index.html', '/maralavitchmanagement'):
             serve_file(self, 'pool-manager.html')
         elif p in ('/quicklog', '/quicklog.html'):
@@ -316,6 +523,9 @@ class Handler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(length)) if length else {}
         data = load_data()
         ts = lambda: int(datetime.now().timestamp() * 1000)
+
+        if not self.require_session(p):
+            return
 
         if p == '/api/chemical':
             body['id'] = ts()
@@ -405,7 +615,7 @@ class Handler(BaseHTTPRequestHandler):
             emp = next((e for e in data['employees'] if str(e['id']) == emp_id), None)
             if emp:
                 if body.get('password'):
-                    emp['password'] = body['password']
+                    emp['password'] = hash_password(body['password'])
                 elif 'password' in emp:
                     del emp['password']
                 save_data(data)
@@ -416,15 +626,47 @@ class Handler(BaseHTTPRequestHandler):
         elif p == '/api/auth':
             emp_id = str(body.get('empId', ''))
             password = body.get('password', '')
+
+            # Works before anyone has a password — the way into a fresh public
+            # deploy. Set ADMIN_PASSWORD in the environment to enable it.
+            if ADMIN_PASSWORD and emp_id == 'admin':
+                if hmac.compare_digest(password, ADMIN_PASSWORD):
+                    self.send_json({'ok': True, 'role': 'Owner', 'name': 'Administrator'},
+                                   session='admin')
+                else:
+                    self.send_json({'ok': False, 'error': 'Incorrect password'}, 401)
+                return
+
             emp = next((e for e in data['employees'] if str(e['id']) == emp_id), None)
             if not emp:
                 self.send_json({'ok': False, 'error': 'Employee not found'}, 404)
-            elif not emp.get('password'):
-                self.send_json({'ok': True})  # No password set — allow through
-            elif emp['password'] == password:
-                self.send_json({'ok': True})
+                return
+
+            stored = emp.get('password')
+            if not stored:
+                # On the LAN this is the long-standing convenience: pick your
+                # name and you're in. Once the app is on the public internet a
+                # blank password is not a credential, so it's refused there.
+                if IS_PUBLIC:
+                    self.send_json({'ok': False, 'needs_password': True,
+                                    'error': 'A manager must set your password before you can sign in.'}, 403)
+                else:
+                    self.send_json({'ok': True, 'role': emp.get('role', ''), 'name': emp.get('name', '')},
+                                   session=emp_id)
+                return
+
+            if verify_password(password, stored):
+                # Quietly upgrade the old plaintext entries as people sign in.
+                if is_legacy_password(stored):
+                    emp['password'] = hash_password(password)
+                    save_data(data)
+                self.send_json({'ok': True, 'role': emp.get('role', ''), 'name': emp.get('name', '')},
+                               session=emp_id)
             else:
-                self.send_json({'ok': False, 'error': 'Incorrect password'})
+                self.send_json({'ok': False, 'error': 'Incorrect password'}, 401)
+
+        elif p == '/api/logout':
+            self.send_json({'ok': True}, end_session=True)
 
         elif p == '/api/shift':
             body['id'] = ts()

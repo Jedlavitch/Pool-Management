@@ -456,6 +456,8 @@ const routes = {
     return ok();
   },
 
+  '/api/logout': () => ok(),
+
   // No filesystem to write to — accept the capture so check-in still completes.
   '/api/photo': () => ok({ filename: '', url: '', demo: true }),
 };
@@ -464,6 +466,16 @@ const routes = {
 function serveLocally(path, method, init) {
   if (method === 'GET') {
     if (path === '/api/data') return reply(snapshot());
+    if (path === '/api/roster') return reply({
+      employees: list('employees').map(e => ({
+        id: e.id, name: e.name, role: e.role, has_password: !!e.password,
+      })),
+      // No cookies without a server: the pages fall back to their own
+      // remembered sign-in, and a password is never demanded here.
+      signed_in: false,
+      requires_password: false,
+    });
+    if (path === '/api/me') return reply({ ok: true, id: null, name: '', role: '' });
     if (path === '/api/ip') return reply({
       ip: 'demo', host: global.location.host, port: 0,
       base_url: global.location.origin + global.location.pathname.replace(/\/[^/]*$/, ''),

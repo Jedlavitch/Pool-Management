@@ -823,8 +823,19 @@
 <script>
 // ── API ────────────────────────────────────────────────────────────────────
 const api = {
-  get: async () => (await fetch('/api/data')).json(),
-  post: async (path, body) => (await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })).json(),
+  // A lapsed session puts the sign-in gate back rather than leaving a
+  // dashboard full of empty panels.
+  _check: res => {
+    if (res.status === 401) {
+      sessionStorage.removeItem('mal-mgmt-signed-in');
+      const gate = document.getElementById('gate');
+      if (gate && gate.classList.contains('hidden')) { gate.classList.remove('hidden'); openGate(); }
+      throw new Error('Signed out');
+    }
+    return res;
+  },
+  get: async () => (api._check(await fetch('/api/data'))).json(),
+  post: async (path, body) => (api._check(await fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }))).json(),
 };
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -2112,7 +2123,9 @@ async function voidKitchenOrder(id, num) {
    Only management roles get the dashboard. Passwords are checked by
    /api/auth, which waves through anyone who has not set one yet — same rule
    the staff app follows, so a fresh install isn't locked out of itself. */
-const GATE_ROLES = ['Manager', 'Owner', 'Staffer'];
+// Must match MANAGEMENT_ROLES in server.py and MGR_ROLES in worker.html —
+// leaving "Pool Owner" out locks the owner out of their own club.
+const GATE_ROLES = ['Pool Owner', 'Owner', 'Manager', 'Staffer'];
 
 async function openGate() {
   const gate = document.getElementById('gate');
@@ -2121,11 +2134,20 @@ async function openGate() {
   const err  = document.getElementById('gate-err');
   const go   = document.getElementById('gate-go');
 
+  // /api/roster is the one endpoint open before sign-in, and it carries only
+  // names and roles — the dashboard's data needs a session.
   let staff = [];
+  let needsPassword = false;
   try {
-    const d = await (await fetch('/api/data')).json();
+    const d = await (await fetch('/api/roster')).json();
     staff = (d.employees || []).filter(e => GATE_ROLES.includes(e.role));
+    needsPassword = !!d.requires_password;
+    if (d.signed_in) { gate.classList.add('hidden'); return; }
   } catch (e) { /* handled by the empty-list branch below */ }
+
+  if (needsPassword) {
+    staff.unshift({ id: 'admin', name: 'Administrator', role: 'Owner' });
+  }
 
   if (!staff.length) {           // nobody to sign in as — don't lock the door
     gate.classList.add('hidden');
@@ -2158,7 +2180,10 @@ async function openGate() {
   go.addEventListener('click', submit);
   pw.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 
-  if (sessionStorage.getItem('mal-mgmt-signed-in')) gate.classList.add('hidden');
+  // With a server, /api/roster's signed_in flag above is the authority. The
+  // remembered id only stands in for it on a static copy, which has no cookie.
+  const noServer = window.MAL_DEMO && window.MAL_DEMO.mode() === 'demo';
+  if (noServer && sessionStorage.getItem('mal-mgmt-signed-in')) gate.classList.add('hidden');
   else pw.focus();
 }
 
