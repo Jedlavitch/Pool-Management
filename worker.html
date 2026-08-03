@@ -530,6 +530,73 @@ select.form-inp{cursor:pointer;}
 .req-form-card{background:var(--card);border-radius:var(--r-sm);padding:14px;margin-bottom:10px;box-shadow:var(--shadow);}
 .req-form-lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
 
+/* ── Orders (snack bar) ────────────────────────────────────────────────── */
+.ord-card{
+  background:var(--card);border-radius:var(--r);padding:13px 15px;margin-bottom:9px;
+  box-shadow:var(--shadow);border-left:4px solid var(--blue);
+}
+.ord-card.s-ready{border-left-color:var(--green);background:var(--green-lt);animation:readypulse 1.8s ease-in-out infinite;}
+@keyframes readypulse{0%,100%{box-shadow:var(--shadow);}50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--green) 26%,transparent);}}
+.ord-card.s-preparing{border-left-color:var(--yellow);}
+.ord-card.s-served{border-left-color:var(--muted);opacity:.6;}
+.ord-card.s-void{border-left-color:var(--red);opacity:.7;}
+.ord-top{display:flex;align-items:center;gap:9px;margin-bottom:7px;}
+.ord-num{font-size:1rem;font-weight:800;color:var(--text);}
+.ord-table{flex:1;font-size:.82rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ord-age{font-size:.74rem;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;}
+.ord-items{font-size:.83rem;color:var(--text);line-height:1.5;}
+.ord-items .oi-note{color:var(--yellow);font-size:.76rem;font-weight:700;}
+/* Status track — the same four beats the kitchen sees, so both sides agree */
+.ord-track{display:flex;align-items:center;gap:4px;margin-top:9px;}
+.ord-step{flex:1;height:5px;border-radius:3px;background:var(--border);}
+.ord-step.on{background:var(--blue);}
+.ord-step.on.ready{background:var(--green);}
+.ord-lbls{display:flex;justify-content:space-between;margin-top:4px;}
+.ord-lbls span{font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.ord-lbls span.on{color:var(--blue);}
+.ord-lbls span.on.ready{color:var(--green);}
+.ord-pickup{
+  width:100%;margin-top:10px;padding:12px;border:none;border-radius:var(--r-sm);
+  background:var(--green);color:#fff;font-size:.88rem;font-weight:800;cursor:pointer;
+}
+.ord-new-btn{
+  width:100%;padding:15px;border:none;border-radius:var(--r-sm);background:var(--blue);
+  color:#fff;font-size:.95rem;font-weight:800;cursor:pointer;margin-bottom:6px;
+}
+/* Order builder */
+.tbl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.tbl-chip{
+  padding:9px 13px;border:1.5px solid var(--border);border-radius:99px;background:var(--card);
+  font-size:.82rem;font-weight:700;color:var(--muted);cursor:pointer;
+}
+.tbl-chip.on{background:var(--blue);border-color:var(--blue);color:#fff;}
+.menu-cat{font-size:.65rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.09em;margin:14px 0 7px;}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+.menu-btn{
+  padding:12px 10px;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--card);
+  text-align:left;cursor:pointer;color:var(--text);box-shadow:var(--shadow);position:relative;
+}
+.menu-btn:active{border-color:var(--blue);background:var(--blue-lt);}
+.menu-btn .mb-n{font-size:.85rem;font-weight:700;line-height:1.25;}
+.menu-btn .mb-p{font-size:.74rem;color:var(--muted);margin-top:3px;}
+.menu-btn .mb-q{
+  position:absolute;top:-6px;right:-6px;min-width:22px;height:22px;border-radius:11px;
+  background:var(--blue);color:#fff;font-size:.72rem;font-weight:800;line-height:22px;text-align:center;
+}
+.cart-line{display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid var(--border);}
+.cart-line:first-child{border-top:none;}
+.cart-n{flex:1;font-size:.86rem;font-weight:700;}
+.cart-n small{display:block;color:var(--muted);font-weight:600;}
+.qty-btn{
+  width:32px;height:32px;border-radius:8px;border:1.5px solid var(--border);background:var(--card2);
+  font-size:1.05rem;font-weight:800;color:var(--text);cursor:pointer;line-height:1;
+}
+.qty-v{min-width:20px;text-align:center;font-weight:800;font-size:.92rem;}
+.cart-note{width:100%;padding:9px;margin-top:2px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:.8rem;font-family:inherit;background:var(--card);color:var(--text);}
+.cart-note:focus{outline:none;border-color:var(--blue);}
+.cart-total{display:flex;justify-content:space-between;font-size:.92rem;font-weight:800;padding-top:11px;border-top:2px solid var(--border);margin-top:6px;}
+
 /* ── Utilities ─────────────────────────────────────────────────────────── */
 .empty{text-align:center;padding:22px 16px;color:var(--muted);font-size:.86rem;}
 .logout-link{display:block;text-align:center;margin-top:18px;background:none;border:none;color:var(--muted);font-size:.78rem;cursor:pointer;}
@@ -595,12 +662,47 @@ select.form-inp{cursor:pointer;}
   <button class="tab-btn active" id="tab-home" onclick="showTab('home')">
     <span class="tab-icon">🏠<span class="tab-badge" id="tab-notif-badge">0</span></span>Home
   </button>
+  <button class="tab-btn" id="tab-orders" onclick="showTab('orders')">
+    <span class="tab-icon">🍔<span class="tab-badge" id="tab-order-badge">0</span></span>Orders
+  </button>
   <button class="tab-btn" id="tab-schedule" onclick="showTab('schedule')">
     <span class="tab-icon">📅</span>Schedule
   </button>
   <button class="tab-btn" id="tab-chemicals" onclick="showTab('chemicals')">
     <span class="tab-icon">🧪</span>Chemicals
   </button>
+</div>
+
+<!-- ── ORDERS (waiter) ────────────────────────────────────────────────── -->
+<div class="screen" id="screen-orders">
+  <button class="ord-new-btn" onclick="startOrder()">＋ Take New Order</button>
+  <div id="ord-ready"></div>
+  <div id="ord-open"></div>
+  <div id="ord-done"></div>
+</div>
+
+<!-- ── NEW ORDER BUILDER ──────────────────────────────────────────────── -->
+<div class="screen" id="screen-neworder">
+  <p class="lbl" style="margin-top:2px">Where's it going?</p>
+  <div class="tbl-chips" id="tbl-chips"></div>
+  <input class="form-inp" id="ord-table-custom" placeholder="Or type a spot — e.g. Cabana 5, Lane 2…"
+    oninput="setTable(this.value, true)"/>
+
+  <p class="lbl">Menu</p>
+  <div id="menu-wrap"><p class="empty">Loading menu…</p></div>
+
+  <p class="lbl">Order</p>
+  <div class="card" id="cart-wrap"><p class="empty">Tap items above to build the order.</p></div>
+
+  <div class="req-form-card" style="margin-top:10px">
+    <div class="req-form-lbl">Note for the kitchen (optional)</div>
+    <textarea id="ord-note" placeholder="Allergies, rush, extra napkins…" rows="2"></textarea>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-back" onclick="cancelOrder()">← Cancel</button>
+    <button class="btn-next" id="ord-send-btn" onclick="sendOrder()">Send to Kitchen 🍳</button>
+  </div>
 </div>
 
 <!-- ── NAME SELECT ────────────────────────────────────────────────────── -->
@@ -911,11 +1013,12 @@ function tick() {
 setInterval(tick, 1000); tick();
 
 // ══ Screen management & wayfinding ═══════════════════════════════════════════
-const TAB_SCREENS = ['board','home','schedule','chemicals'];
+const TAB_SCREENS = ['board','home','orders','schedule','chemicals'];
 const SCREEN_TITLES = {
   board:'Board', home:'Home', schedule:'My Schedule', chemicals:'Log Chemicals',
   clockin:'Clock In', clockout:'Clock Out', request:'Request Time', result:'All Set',
   name:'Sign In', password:'Sign In', pool:'Choose Pool',
+  orders:'Orders', neworder:'New Order',
 };
 function setHeader(id) {
   const el = document.getElementById('hdr-title');
@@ -944,6 +1047,7 @@ function showTab(name) {
   }
   show(name);
   if (name === 'board') renderBoard();
+  if (name === 'orders') renderOrders();
   if (name === 'schedule') renderScheduleTab();
   if (name === 'chemicals') {
     document.getElementById('chem-sub').textContent = `Logged as ${empName}`;
@@ -1836,6 +1940,180 @@ async function submitRequest(){
   btn.disabled=false;btn.textContent='Submit →';
 }
 
+// ══ Orders (snack bar) ══════════════════════════════════════════════════════
+// A waiter fires a ticket here; the kitchen display picks it up within seconds.
+// Both screens read the same four statuses, so neither side has to guess.
+let menuItems = [], myOrders = [], cart = [], ordTable = '';
+let _ordPoll = null, _knownReady = null;
+const ORD_STEPS = ['new','preparing','ready','served'];
+const TABLE_PRESETS = ['Poolside','Snack Bar','Deck 1','Deck 2','Cabana 1','Cabana 2','Cabana 3','Baby Pool'];
+const escH = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function fetchOrders() {
+  const d = await (await fetch(`/api/orders?poolId=${activePoolId}`)).json();
+  menuItems = (d.menu || []).filter(m => m.active !== false);
+  myOrders  = (d.orders || []).filter(o => String(o.empId) === String(empId));
+  return d;
+}
+
+function ordAge(o) {
+  const s = Math.max(0, Math.floor((Date.now() - o.createdTs) / 1000));
+  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2,'0')}s`;
+}
+
+function orderCard(o) {
+  const i = ORD_STEPS.indexOf(o.status);
+  const label = {new:'Sent to kitchen', preparing:'Cooking now', ready:'READY — pick it up!',
+                 served:'Delivered', void:'Cancelled by kitchen'}[o.status] || o.status;
+  const items = o.items.map(it =>
+    `${it.qty}× ${escH(it.name)}${it.note ? ` <span class="oi-note">(${escH(it.note)})</span>` : ''}`).join('<br>');
+  const track = o.status === 'void' ? '' : `
+    <div class="ord-track">${ORD_STEPS.map((s, n) =>
+      `<div class="ord-step ${n <= i ? 'on' : ''} ${s === 'ready' && n <= i ? 'ready' : ''}"></div>`).join('')}</div>
+    <div class="ord-lbls">${['Sent','Cooking','Ready','Served'].map((s, n) =>
+      `<span class="${n <= i ? 'on' : ''} ${n === 2 && i >= 2 ? 'ready' : ''}">${s}</span>`).join('')}</div>`;
+  return `
+    <div class="ord-card s-${o.status}">
+      <div class="ord-top">
+        <span class="ord-num">#${o.num}</span>
+        <span class="ord-table">${escH(o.table)}</span>
+        <span class="ord-age">${o.status === 'served' || o.status === 'void' ? escH(o.placed) : ordAge(o)}</span>
+      </div>
+      <div class="ord-items">${items}</div>
+      ${o.note ? `<div class="ord-items" style="margin-top:5px"><span class="oi-note">📝 ${escH(o.note)}</span></div>` : ''}
+      ${track}
+      <div style="font-size:.74rem;font-weight:800;margin-top:7px;color:${
+        o.status==='ready' ? 'var(--green)' : o.status==='void' ? 'var(--red)' : 'var(--muted)'}">${label}</div>
+      ${o.status === 'ready' ? `<button class="ord-pickup" onclick="pickedUp(${o.id})">✓ Picked Up & Delivered</button>` : ''}
+    </div>`;
+}
+
+async function renderOrders() {
+  try { await fetchOrders(); } catch (e) {
+    document.getElementById('ord-open').innerHTML = `<p class="empty">Can't reach the kitchen — check WiFi.</p>`;
+    return;
+  }
+  const ready = myOrders.filter(o => o.status === 'ready');
+  const open  = myOrders.filter(o => o.status === 'new' || o.status === 'preparing');
+  const done  = myOrders.filter(o => o.status === 'served' || o.status === 'void').slice(-6).reverse();
+
+  document.getElementById('ord-ready').innerHTML = ready.length
+    ? `<p class="lbl" style="color:var(--green)">Ready for pickup</p>` + ready.map(orderCard).join('') : '';
+  document.getElementById('ord-open').innerHTML = open.length
+    ? `<p class="lbl">In the kitchen</p>` + open.map(orderCard).join('')
+    : (ready.length ? '' : `<p class="empty">No open orders. Tap “Take New Order” to fire one.</p>`);
+  document.getElementById('ord-done').innerHTML = done.length
+    ? `<p class="lbl">Earlier today</p>` + done.map(orderCard).join('') : '';
+
+  const badge = document.getElementById('tab-order-badge');
+  if (badge) { badge.textContent = ready.length; badge.style.display = ready.length ? 'block' : 'none'; }
+
+  // Buzz once when the kitchen calls an order up
+  const ids = ready.map(o => o.id);
+  if (_knownReady && ids.some(id => !_knownReady.includes(id))) {
+    if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+  }
+  _knownReady = ids;
+}
+
+// ── Builder ────────────────────────────────────────────────────────────────
+async function startOrder() {
+  cart = []; ordTable = '';
+  document.getElementById('ord-note').value = '';
+  document.getElementById('ord-table-custom').value = '';
+  document.getElementById('tbl-chips').innerHTML = TABLE_PRESETS.map(t =>
+    `<button class="tbl-chip" id="chip-${t.replace(/\W/g,'')}" onclick="setTable('${t}')">${t}</button>`).join('');
+  show('neworder');
+  try { await fetchOrders(); } catch (e) {}
+  renderMenu(); renderCart();
+}
+function setTable(t, isCustom) {
+  ordTable = t;
+  document.querySelectorAll('.tbl-chip').forEach(c => c.classList.remove('on'));
+  if (!isCustom) {
+    document.getElementById('ord-table-custom').value = '';
+    const el = document.getElementById('chip-' + t.replace(/\W/g,''));
+    if (el) el.classList.add('on');
+  }
+}
+function renderMenu() {
+  const wrap = document.getElementById('menu-wrap');
+  if (!menuItems.length) { wrap.innerHTML = `<p class="empty">No menu items yet — a manager can add them in the Snack Bar tab.</p>`; return; }
+  const cats = [...new Set(menuItems.map(m => m.category || 'Other'))];
+  wrap.innerHTML = cats.map(c => `
+    <div class="menu-cat">${escH(c)}</div>
+    <div class="menu-grid">
+      ${menuItems.filter(m => (m.category || 'Other') === c).map(m => {
+        const line = cart.find(x => x.id === m.id);
+        return `<button class="menu-btn" onclick="addItem(${m.id})">
+          ${line ? `<span class="mb-q">${line.qty}</span>` : ''}
+          <div class="mb-n">${escH(m.name)}</div>
+          <div class="mb-p">$${Number(m.price || 0).toFixed(2)}</div>
+        </button>`;
+      }).join('')}
+    </div>`).join('');
+}
+function addItem(id) {
+  const m = menuItems.find(x => x.id === id);
+  if (!m) return;
+  const line = cart.find(x => x.id === id);
+  if (line) line.qty++;
+  else cart.push({id, name: m.name, price: m.price || 0, qty: 1, note: ''});
+  renderMenu(); renderCart();
+}
+function bumpQty(id, delta) {
+  const line = cart.find(x => x.id === id);
+  if (!line) return;
+  line.qty += delta;
+  if (line.qty <= 0) cart = cart.filter(x => x.id !== id);
+  renderMenu(); renderCart();
+}
+function setItemNote(id, v) { const l = cart.find(x => x.id === id); if (l) l.note = v; }
+function renderCart() {
+  const el = document.getElementById('cart-wrap');
+  if (!cart.length) { el.innerHTML = `<p class="empty">Tap items above to build the order.</p>`; return; }
+  const total = cart.reduce((s, l) => s + l.price * l.qty, 0);
+  el.innerHTML = cart.map(l => `
+    <div class="cart-line">
+      <div class="cart-n">${escH(l.name)}<small>$${(l.price * l.qty).toFixed(2)}</small></div>
+      <button class="qty-btn" onclick="bumpQty(${l.id},-1)">−</button>
+      <span class="qty-v">${l.qty}</span>
+      <button class="qty-btn" onclick="bumpQty(${l.id},1)">＋</button>
+    </div>
+    <input class="cart-note" placeholder="Note — no pickles, well done…" value="${escH(l.note)}"
+      oninput="setItemNote(${l.id},this.value)"/>`).join('') +
+    `<div class="cart-total"><span>Total</span><span>$${total.toFixed(2)}</span></div>`;
+}
+function cancelOrder() { cart = []; showTab('orders'); }
+
+async function sendOrder() {
+  if (!cart.length) { alert('Add at least one item.'); return; }
+  const custom = document.getElementById('ord-table-custom').value.trim();
+  const table = custom || ordTable;
+  if (!table) { alert('Pick where the order is going.'); return; }
+  const btn = document.getElementById('ord-send-btn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    const r = await post('/api/order', {
+      poolId: activePoolId, table, empId, empName,
+      note: document.getElementById('ord-note').value.trim(),
+      items: cart.map(l => ({name: l.name, qty: l.qty, price: l.price, note: l.note})),
+    });
+    if (!r.ok) throw new Error(r.error || 'Failed');
+    cart = [];
+    showTab('orders');
+  } catch (e) {
+    alert('Could not send the order: ' + e.message);
+  }
+  btn.disabled = false; btn.textContent = 'Send to Kitchen 🍳';
+}
+
+async function pickedUp(id) {
+  await post('/api/order/status', {id, status: 'served', byName: empName});
+  renderOrders();
+}
+
 // ══ Init ════════════════════════════════════════════════════════════════════
 async function init() {
   // Register service worker for PWA
@@ -1855,6 +2133,18 @@ async function init() {
   setInterval(() => {
     if (empId && activePoolId != null) renderNotifications().catch(() => {});
   }, 30000);
+  // Orders move fast — refresh them every 6s while signed in, so a waiter sees
+  // "Ready" almost the moment the kitchen bumps it, on whatever tab they're on.
+  setInterval(() => {
+    if (!empId || activePoolId == null) return;
+    const onTab = document.getElementById('screen-orders').classList.contains('active');
+    if (onTab) renderOrders().catch(() => {});
+    else fetchOrders().then(() => {
+      const n = myOrders.filter(o => o.status === 'ready').length;
+      const b = document.getElementById('tab-order-badge');
+      if (b) { b.textContent = n; b.style.display = n ? 'block' : 'none'; }
+    }).catch(() => {});
+  }, 6000);
 }
 init();
 </script>

@@ -2,7 +2,7 @@
 import json, os, socket, threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Serializes writes so concurrent requests can't corrupt or lose each other's
 # updates once the server handles requests on multiple threads.
@@ -56,10 +56,49 @@ def get_local_ip():
     return '127.0.0.1'
 
 def default_data():
-    return {'employees': [], 'chemicals': [], 'shifts': [], 'punches': [], 'announcements': [], 'resources': [], 'pool_status': 'open', 'shift_requests': [], 'notifications': [], 'shift_confirmations': {}, 'pools': [], 'breaks': []}
+    return {'employees': [], 'chemicals': [], 'shifts': [], 'punches': [], 'announcements': [], 'resources': [], 'pool_status': 'open', 'shift_requests': [], 'notifications': [], 'shift_confirmations': {}, 'pools': [], 'breaks': [], 'menu': [], 'orders': []}
 
 # Entities that belong to a single pool and carry a poolId
-POOL_SCOPED = ('shifts', 'chemicals', 'punches', 'announcements', 'resources', 'shift_requests', 'notifications', 'breaks')
+POOL_SCOPED = ('shifts', 'chemicals', 'punches', 'announcements', 'resources', 'shift_requests', 'notifications', 'breaks', 'menu', 'orders')
+
+# ── Snack bar / kitchen display ─────────────────────────────────────────────
+# A ticket walks this line: a waiter fires it, the kitchen starts it, the kitchen
+# calls it up, the waiter runs it out. 'void' is off to the side (cancelled).
+ORDER_FLOW = ['new', 'preparing', 'ready', 'served']
+ORDER_STATUSES = ORDER_FLOW + ['void']
+# Which timestamp each status stamps when a ticket lands on it
+ORDER_STAMPS = {'preparing': 'startedTs', 'ready': 'readyTs', 'served': 'servedTs', 'void': 'voidedTs'}
+
+# Tickets older than this are dropped on the next write so data.json can't grow forever
+ORDER_RETENTION_DAYS = 14
+
+# Seeded once per pool so a brand-new pool has a working snack bar on day one.
+STARTER_MENU = [
+    ('Grill',     'Cheeseburger',       8.50),
+    ('Grill',     'Hamburger',          7.50),
+    ('Grill',     'Hot Dog',            5.00),
+    ('Grill',     'Chicken Tenders',    8.00),
+    ('Grill',     'Grilled Cheese',     6.00),
+    ('Grill',     'French Fries',       4.00),
+    ('Grill',     'Mozzarella Sticks',  6.50),
+    ('Snacks',    'Nachos',             5.50),
+    ('Snacks',    'Soft Pretzel',       4.00),
+    ('Snacks',    'Chips',              2.00),
+    ('Snacks',    'Fruit Cup',          4.50),
+    ('Drinks',    'Fountain Soda',      2.50),
+    ('Drinks',    'Bottled Water',      2.00),
+    ('Drinks',    'Lemonade',           3.00),
+    ('Drinks',    'Iced Tea',           3.00),
+    ('Drinks',    'Gatorade',           3.50),
+    ('Ice Cream', 'Ice Cream Sandwich', 3.50),
+    ('Ice Cream', 'Popsicle',           2.50),
+    ('Ice Cream', 'Soft Serve Cone',    4.00),
+]
+
+def seed_menu(pool_id, base_ts):
+    return [{'id': base_ts + i, 'poolId': pool_id, 'category': cat,
+             'name': name, 'price': price, 'active': True}
+            for i, (cat, name, price) in enumerate(STARTER_MENU)]
 
 def migrate(data):
     """Bring older single-pool data forward to the multi-pool model. Idempotent —
@@ -79,11 +118,18 @@ def migrate(data):
         pools = data['pools']
         changed = True
     default_pid = pools[0]['id']
-    for pool in pools:
+    for idx, pool in enumerate(pools):
         if 'status' not in pool:
             pool['status'] = 'open'; changed = True
         if 'address' not in pool:
             pool['address'] = ''; changed = True
+        # Give each pool a starter snack-bar menu exactly once. The flag matters:
+        # without it, a manager who deliberately clears the menu would watch it
+        # grow back on the very next request.
+        if not pool.get('menu_seeded'):
+            base = int(datetime.now().timestamp() * 1000) + idx * 1000
+            data.setdefault('menu', []).extend(seed_menu(pool['id'], base))
+            pool['menu_seeded'] = True; changed = True
     # Employees get a list of assigned pools
     for e in data.get('employees', []):
         if not isinstance(e.get('poolIds'), list) or not e.get('poolIds'):
@@ -165,6 +211,8 @@ class Handler(BaseHTTPRequestHandler):
             serve_file(self, 'worker.html')
         elif p in ('/print-qr', '/print-qr.html'):
             serve_file(self, 'print-qr.html')
+        elif p in ('/kds', '/kds.html', '/kitchen'):
+            serve_file(self, 'kds.html')
         elif p == '/manifest.json':
             serve_file(self, 'manifest.json', 'application/manifest+json')
         elif p == '/sw.js':
@@ -178,6 +226,29 @@ class Handler(BaseHTTPRequestHandler):
                 se['has_password'] = bool(e.get('password'))
                 out['employees'].append(se)
             self.send_json(out)
+        elif p == '/api/orders':
+            # Lightweight feed for the kitchen display and the waiters' order tab —
+            # both poll this every few seconds, so it must stay small.
+            from urllib.parse import parse_qs
+            q = parse_qs(urlparse(self.path).query)
+            pid = q.get('poolId', [None])[0]
+            d = load_data()
+            orders = d.get('orders', [])
+            if pid not in (None, '', 'all'):
+                orders = [o for o in orders if str(o.get('poolId')) == str(pid)]
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            # Today's tickets plus anything still open from before midnight
+            orders = [o for o in orders
+                      if o.get('date') == today_str or o.get('status') in ('new', 'preparing', 'ready')]
+            menu = [m for m in d.get('menu', [])
+                    if pid in (None, '', 'all') or str(m.get('poolId')) == str(pid)]
+            self.send_json({
+                'orders': sorted(orders, key=lambda o: o.get('createdTs', 0)),
+                'menu': menu,
+                'pools': [{'id': x['id'], 'name': x.get('name', ''), 'status': x.get('status', 'open')}
+                          for x in d.get('pools', [])],
+                'now': int(datetime.now().timestamp() * 1000),
+            })
         elif p == '/api/ip':
             self.send_json({'ip': get_local_ip(), 'host': get_mdns_host(), 'port': PORT, 'base_url': get_base_url()})
         elif p.startswith('/photos/'):
@@ -642,6 +713,121 @@ class Handler(BaseHTTPRequestHandler):
 
         elif p == '/api/break/delete':
             data['breaks'] = [b for b in data.get('breaks', []) if b['id'] != body['id']]
+            save_data(data)
+            self.send_json({'ok': True})
+
+        # ── Snack bar: menu ────────────────────────────────────────────────
+        elif p == '/api/menu':
+            body['id'] = ts()
+            body['name'] = (body.get('name') or '').strip()
+            body['category'] = (body.get('category') or 'Snacks').strip()
+            try:
+                body['price'] = round(float(body.get('price') or 0), 2)
+            except (TypeError, ValueError):
+                body['price'] = 0.0
+            body.setdefault('active', True)
+            if not body['name']:
+                self.send_json({'ok': False, 'error': 'Item needs a name'}, 400)
+            else:
+                data.setdefault('menu', []).append(body)
+                save_data(data)
+                self.send_json({'ok': True, 'item': body})
+
+        elif p == '/api/menu/update':
+            item = next((m for m in data.get('menu', []) if m['id'] == body.get('id')), None)
+            if not item:
+                self.send_json({'ok': False, 'error': 'Not found'}, 404)
+            else:
+                for k in ('name', 'category', 'active'):
+                    if k in body:
+                        item[k] = body[k]
+                if 'price' in body:
+                    try:
+                        item['price'] = round(float(body['price']), 2)
+                    except (TypeError, ValueError):
+                        pass
+                save_data(data)
+                self.send_json({'ok': True, 'item': item})
+
+        elif p == '/api/menu/delete':
+            data['menu'] = [m for m in data.get('menu', []) if m['id'] != body['id']]
+            save_data(data)
+            self.send_json({'ok': True})
+
+        # ── Snack bar: orders (KDS) ────────────────────────────────────────
+        elif p == '/api/order':
+            items = [i for i in (body.get('items') or []) if (i.get('name') or '').strip()]
+            if not items:
+                self.send_json({'ok': False, 'error': 'Order has no items'}, 400)
+                return
+            now = datetime.now()
+            today_str = now.strftime('%Y-%m-%d')
+            pid = body.get('poolId')
+            # Ticket numbers restart at 1 each day, per pool — "order 12" has to
+            # mean one thing on the pass at any given moment.
+            same_day = [o for o in data.get('orders', [])
+                        if o.get('date') == today_str and str(o.get('poolId')) == str(pid)]
+            num = max([o.get('num', 0) for o in same_day], default=0) + 1
+            clean = []
+            for i in items:
+                try:
+                    qty = max(1, int(i.get('qty', 1)))
+                except (TypeError, ValueError):
+                    qty = 1
+                try:
+                    price = round(float(i.get('price') or 0), 2)
+                except (TypeError, ValueError):
+                    price = 0.0
+                clean.append({'name': str(i.get('name')).strip(), 'qty': qty,
+                              'price': price, 'note': (i.get('note') or '').strip()})
+            order = {
+                'id': ts(), 'num': num, 'poolId': pid, 'date': today_str,
+                'table': (body.get('table') or '').strip() or 'Walk-up',
+                'items': clean,
+                'note': (body.get('note') or '').strip(),
+                'empId': str(body.get('empId', '')), 'empName': body.get('empName', ''),
+                'status': 'new',
+                'total': round(sum(i['price'] * i['qty'] for i in clean), 2),
+                'placed': now.strftime('%H:%M'),
+                'createdTs': int(now.timestamp() * 1000),
+                'startedTs': None, 'readyTs': None, 'servedTs': None,
+            }
+            data.setdefault('orders', []).append(order)
+            # Keep the file from growing without bound
+            cutoff = (now - timedelta(days=ORDER_RETENTION_DAYS)).strftime('%Y-%m-%d')
+            data['orders'] = [o for o in data['orders'] if o.get('date', '') >= cutoff]
+            save_data(data)
+            self.send_json({'ok': True, 'order': order})
+
+        elif p == '/api/order/status':
+            order = next((o for o in data.get('orders', []) if o['id'] == body.get('id')), None)
+            status = body.get('status')
+            if not order:
+                self.send_json({'ok': False, 'error': 'Not found'}, 404)
+            elif status not in ORDER_STATUSES:
+                self.send_json({'ok': False, 'error': f'Unknown status: {status}'}, 400)
+            else:
+                prev = order.get('status')
+                order['status'] = status
+                stamp = ORDER_STAMPS.get(status)
+                if stamp:
+                    order[stamp] = int(datetime.now().timestamp() * 1000)
+                order['bumpedBy'] = body.get('byName', '')
+                # Tell the waiter their food is up — they're out on the deck, not
+                # staring at the pass.
+                if status == 'ready' and prev != 'ready' and order.get('empId'):
+                    tbl = order.get('table', '')
+                    data.setdefault('notifications', []).insert(0, {
+                        'id': ts() + 1, 'empId': str(order['empId']), 'poolId': order.get('poolId'),
+                        'title': f"🍔 Order #{order.get('num')} is ready",
+                        'message': f"Pick up for {tbl} — {sum(i['qty'] for i in order.get('items', []))} item(s) on the pass.",
+                        'read': False, 'ts': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                    })
+                save_data(data)
+                self.send_json({'ok': True, 'order': order})
+
+        elif p == '/api/order/delete':
+            data['orders'] = [o for o in data.get('orders', []) if o['id'] != body['id']]
             save_data(data)
             self.send_json({'ok': True})
 

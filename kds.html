@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#0b0f16"/>
+<title>Kitchen Display — Mar-A-Lavitch</title>
+<style>
+/* ── Tokens ──────────────────────────────────────────────────────────────
+   Built for a screen bolted to a wall in a hot snack bar: dark background,
+   huge type, colour that means one thing each. */
+:root{
+  --bg:#0b0f16; --bar:#131a26; --card:#1b2434; --card2:#212c3f;
+  --text:#eef3fb; --muted:#8fa0bb; --line:#2c3849;
+  --new:#38bdf8; --cook:#f59e0b; --ready:#22c55e; --late:#ef4444;
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{
+  font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+  background:var(--bg);color:var(--text);height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+  letter-spacing:-.011em;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────── */
+header{
+  background:var(--bar);border-bottom:1px solid var(--line);
+  padding:10px 16px;display:flex;align-items:center;gap:16px;flex-shrink:0;
+}
+.brand{font-size:1.15rem;font-weight:800;letter-spacing:-.02em;white-space:nowrap;}
+.brand span{color:var(--muted);font-weight:600;font-size:.8rem;margin-left:6px;}
+.counts{display:flex;gap:8px;margin-left:auto;}
+.count{
+  display:flex;align-items:baseline;gap:6px;padding:5px 12px;border-radius:99px;
+  background:var(--card);border:1px solid var(--line);
+}
+.count b{font-size:1.05rem;font-variant-numeric:tabular-nums;}
+.count i{font-style:normal;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);}
+.count.n b{color:var(--new);} .count.c b{color:var(--cook);} .count.r b{color:var(--ready);}
+select,.icon-btn{
+  background:var(--card);color:var(--text);border:1px solid var(--line);
+  border-radius:10px;padding:8px 11px;font-size:.85rem;font-weight:700;
+  font-family:inherit;cursor:pointer;
+}
+.icon-btn:active{background:var(--card2);}
+.icon-btn.off{opacity:.42;}
+#clock{font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ready);flex-shrink:0;}
+.dot.stale{background:var(--late);}
+
+/* ── Board ───────────────────────────────────────────────────────────── */
+.board{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);min-height:0;}
+.col{background:var(--bg);display:flex;flex-direction:column;min-height:0;}
+.col-hd{
+  padding:9px 14px;font-size:.72rem;font-weight:800;text-transform:uppercase;
+  letter-spacing:.1em;display:flex;align-items:center;gap:8px;flex-shrink:0;
+  border-bottom:2px solid var(--line);
+}
+.col-hd .pip{width:10px;height:10px;border-radius:3px;}
+.col-new .col-hd{color:var(--new);} .col-new .pip{background:var(--new);}
+.col-cook .col-hd{color:var(--cook);} .col-cook .pip{background:var(--cook);}
+.col-ready .col-hd{color:var(--ready);} .col-ready .pip{background:var(--ready);}
+.col-body{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:10px;}
+.col-empty{color:var(--muted);text-align:center;padding:34px 10px;font-size:.85rem;}
+
+/* ── Ticket ──────────────────────────────────────────────────────────── */
+.tk{
+  background:var(--card);border-radius:var(--r);overflow:hidden;
+  border:1px solid var(--line);border-left:5px solid var(--new);
+  animation:pop .18s ease-out;flex-shrink:0;
+}
+@keyframes pop{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+.tk.s-preparing{border-left-color:var(--cook);}
+.tk.s-ready{border-left-color:var(--ready);}
+.tk.warn{border-color:var(--cook);}
+.tk.late{border-color:var(--late);animation:latepulse 1.4s ease-in-out infinite;}
+@keyframes latepulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.55);}50%{box-shadow:0 0 0 7px rgba(239,68,68,0);}}
+.tk-hd{display:flex;align-items:center;gap:9px;padding:10px 12px;background:var(--card2);}
+.tk-num{font-size:1.25rem;font-weight:800;font-variant-numeric:tabular-nums;}
+.tk-where{flex:1;min-width:0;}
+.tk-table{font-size:.92rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tk-by{font-size:.7rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tk-age{
+  font-size:1.05rem;font-weight:800;font-variant-numeric:tabular-nums;
+  padding:3px 9px;border-radius:8px;background:rgba(255,255,255,.07);
+}
+.tk-age.warn{background:rgba(245,158,11,.2);color:var(--cook);}
+.tk-age.late{background:rgba(239,68,68,.22);color:var(--late);}
+.tk-items{padding:9px 12px;display:flex;flex-direction:column;gap:7px;}
+.it{display:flex;gap:9px;align-items:baseline;font-size:1rem;line-height:1.25;}
+.it-q{
+  min-width:26px;text-align:center;font-weight:800;background:rgba(255,255,255,.09);
+  border-radius:6px;padding:1px 5px;font-size:.85rem;flex-shrink:0;
+}
+.it-n{font-weight:600;flex:1;}
+.it-note{display:block;font-size:.79rem;color:var(--cook);font-weight:700;margin-top:2px;}
+.tk-note{
+  margin:0 12px 10px;padding:7px 10px;border-radius:8px;font-size:.8rem;font-weight:700;
+  background:rgba(245,158,11,.14);color:#fcd34d;border-left:3px solid var(--cook);
+}
+.tk-actions{display:flex;gap:1px;background:var(--line);}
+.tk-actions button{
+  flex:1;padding:13px 6px;border:none;font-family:inherit;font-size:.88rem;
+  font-weight:800;cursor:pointer;color:#04121f;background:var(--new);
+  transition:filter .12s;
+}
+.tk-actions button:active{filter:brightness(.85);}
+.tk-actions .b-cook{background:var(--cook);}
+.tk-actions .b-ready{background:var(--ready);}
+.tk-actions .b-min{flex:0 0 54px;background:var(--card2);color:var(--muted);font-size:1rem;}
+
+/* ── Recall strip ────────────────────────────────────────────────────── */
+.recall{
+  background:var(--bar);border-top:1px solid var(--line);padding:7px 12px;
+  display:flex;align-items:center;gap:9px;overflow-x:auto;flex-shrink:0;min-height:48px;
+}
+.recall-lbl{font-size:.65rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);white-space:nowrap;}
+.rc{
+  background:var(--card);border:1px solid var(--line);border-radius:9px;
+  padding:5px 11px;font-size:.78rem;font-weight:700;white-space:nowrap;cursor:pointer;color:var(--muted);
+}
+.rc:active{background:var(--card2);}
+.rc b{color:var(--text);}
+
+@media (max-width:900px){
+  .board{grid-template-columns:1fr;grid-template-rows:repeat(3,1fr);}
+  .counts{display:none;}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="dot" id="live-dot"></div>
+  <div class="brand">🍔 Kitchen Display<span id="pool-lbl"></span></div>
+  <div class="counts">
+    <div class="count n"><b id="c-new">0</b><i>New</i></div>
+    <div class="count c"><b id="c-cook">0</b><i>Cooking</i></div>
+    <div class="count r"><b id="c-ready">0</b><i>Ready</i></div>
+  </div>
+  <select id="pool-sel" onchange="pickPool(this.value)"></select>
+  <button class="icon-btn" id="snd-btn" onclick="toggleSound()" title="New-order chime">🔔</button>
+  <button class="icon-btn" onclick="toggleFull()" title="Full screen">⛶</button>
+  <div id="clock"></div>
+</header>
+
+<div class="board">
+  <div class="col col-new">
+    <div class="col-hd"><span class="pip"></span>New Orders</div>
+    <div class="col-body" id="col-new"></div>
+  </div>
+  <div class="col col-cook">
+    <div class="col-hd"><span class="pip"></span>Cooking</div>
+    <div class="col-body" id="col-preparing"></div>
+  </div>
+  <div class="col col-ready">
+    <div class="col-hd"><span class="pip"></span>Ready — Call the Waiter</div>
+    <div class="col-body" id="col-ready"></div>
+  </div>
+</div>
+
+<div class="recall">
+  <span class="recall-lbl">Served</span>
+  <div id="recall-list" style="display:flex;gap:8px"></div>
+  <span class="recall-lbl" id="recall-empty">nothing yet — tap a served ticket to recall it</span>
+</div>
+
+<script>
+// ══ State ═════════════════════════════════════════════════════════════════
+let poolId   = Number(localStorage.getItem('kds_pool')) || null;
+let poolName = '';
+let orders   = [];
+let soundOn  = localStorage.getItem('kds_sound') !== 'off';
+let seenIds  = null;    // null until first load, so we don't chime for a full board
+let lastOk   = Date.now();
+
+// Age thresholds (minutes) — a ticket that sits goes amber, then red and pulses.
+const WARN_MIN = 6, LATE_MIN = 10;
+
+const post = async (path, body) =>
+  (await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})).json();
+
+// ══ Chime ═════════════════════════════════════════════════════════════════
+// Synthesised so the page stays a single file with no asset to lose.
+let actx = null;
+function chime() {
+  if (!soundOn) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    [0, 0.14].forEach((delay, i) => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sine';
+      o.frequency.value = i ? 1180 : 880;
+      const t = actx.currentTime + delay;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.32, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.connect(g); g.connect(actx.destination);
+      o.start(t); o.stop(t + 0.32);
+    });
+  } catch (e) { /* audio blocked until first tap — never break the board over it */ }
+}
+function toggleSound() {
+  soundOn = !soundOn;
+  localStorage.setItem('kds_sound', soundOn ? 'on' : 'off');
+  const b = document.getElementById('snd-btn');
+  b.classList.toggle('off', !soundOn);
+  b.textContent = soundOn ? '🔔' : '🔕';
+  if (soundOn) chime();
+}
+function toggleFull() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(()=>{});
+}
+
+// ══ Utilities ═════════════════════════════════════════════════════════════
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function ageMin(o) {
+  // Ready tickets time how long they've been sitting on the pass; the rest time
+  // from when the waiter fired them.
+  const from = o.status === 'ready' ? (o.readyTs || o.createdTs) : o.createdTs;
+  return (Date.now() - from) / 60000;
+}
+function fmtAge(mins) {
+  const s = Math.max(0, Math.floor(mins * 60));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function heat(mins) { return mins >= LATE_MIN ? 'late' : mins >= WARN_MIN ? 'warn' : ''; }
+
+// ══ Render ════════════════════════════════════════════════════════════════
+function ticket(o) {
+  const mins = ageMin(o), h = heat(mins);
+  const next = { new:['preparing','Start Cooking','b-cook'], preparing:['ready','Food Up ✓','b-ready'],
+                 ready:['served','Picked Up ✓','b-ready'] }[o.status];
+  const back = { preparing:'new', ready:'preparing' }[o.status];
+  return `
+  <div class="tk s-${o.status} ${h}" data-id="${o.id}">
+    <div class="tk-hd">
+      <div class="tk-num">#${o.num}</div>
+      <div class="tk-where">
+        <div class="tk-table">${esc(o.table)}</div>
+        <div class="tk-by">${esc(o.empName || 'staff')} · ${esc(o.placed)}</div>
+      </div>
+      <div class="tk-age ${h}">${fmtAge(mins)}</div>
+    </div>
+    <div class="tk-items">
+      ${o.items.map(i => `
+        <div class="it">
+          <span class="it-q">${i.qty}</span>
+          <span class="it-n">${esc(i.name)}${i.note ? `<span class="it-note">↳ ${esc(i.note)}</span>` : ''}</span>
+        </div>`).join('')}
+    </div>
+    ${o.note ? `<div class="tk-note">📝 ${esc(o.note)}</div>` : ''}
+    <div class="tk-actions">
+      ${back ? `<button class="b-min" onclick="bump(${o.id},'${back}')" title="Back a step">↩</button>` : ''}
+      <button class="${next[2]}" onclick="bump(${o.id},'${next[0]}')">${next[1]}</button>
+      <button class="b-min" onclick="voidTicket(${o.id},${o.num})" title="Void ticket">✕</button>
+    </div>
+  </div>`;
+}
+
+// Rebuild only when the tickets themselves changed. Blowing the DOM away on a
+// timer would yank buttons out from under a cook's finger mid-tap.
+let _sig = '';
+function render() {
+  const sig = orders.map(o => `${o.id}:${o.status}`).join('|');
+  if (sig === _sig) { tickAges(); return; }
+  _sig = sig;
+  ['new','preparing','ready'].forEach(st => {
+    const list = orders.filter(o => o.status === st);   // already oldest-first
+    const el = document.getElementById('col-' + st);
+    el.innerHTML = list.length ? list.map(ticket).join('')
+      : `<div class="col-empty">${st === 'new' ? 'No orders on the rail' : st === 'preparing' ? 'Nothing on the grill' : 'Nothing waiting'}</div>`;
+  });
+  document.getElementById('c-new').textContent   = orders.filter(o => o.status === 'new').length;
+  document.getElementById('c-cook').textContent  = orders.filter(o => o.status === 'preparing').length;
+  document.getElementById('c-ready').textContent = orders.filter(o => o.status === 'ready').length;
+
+  const served = orders.filter(o => o.status === 'served').slice(-8).reverse();
+  document.getElementById('recall-list').innerHTML = served.map(o =>
+    `<button class="rc" onclick="bump(${o.id},'ready')" title="Recall to Ready">
+       <b>#${o.num}</b> ${esc(o.table)}</button>`).join('');
+  document.getElementById('recall-empty').style.display = served.length ? 'none' : 'inline';
+}
+
+// Timers tick locally every second so the board feels live between polls — but
+// in place, touching only the clock and its colour, never the buttons.
+function tickAges() {
+  document.querySelectorAll('.tk').forEach(el => {
+    const o = orders.find(x => String(x.id) === el.dataset.id);
+    if (!o) return;
+    const mins = ageMin(o), h = heat(mins);
+    const age = el.querySelector('.tk-age');
+    if (age) { age.textContent = fmtAge(mins); age.className = 'tk-age ' + h; }
+    const cls = `tk s-${o.status} ${h}`.trim();
+    if (el.className !== cls) el.className = cls;
+  });
+}
+
+// ══ Data ══════════════════════════════════════════════════════════════════
+async function load() {
+  try {
+    const q = poolId ? `?poolId=${poolId}` : '';
+    const d = await (await fetch('/api/orders' + q)).json();
+    lastOk = Date.now();
+
+    // Pool picker (first load, or when pools change)
+    const sel = document.getElementById('pool-sel');
+    if (sel.options.length !== (d.pools || []).length) {
+      sel.innerHTML = (d.pools || []).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    }
+    if (!poolId && (d.pools || []).length) { poolId = Number(d.pools[0].id); localStorage.setItem('kds_pool', poolId); }
+    const me = (d.pools || []).find(p => Number(p.id) === Number(poolId));
+    if (me) { poolName = me.name; sel.value = String(poolId); document.getElementById('pool-lbl').textContent = '· ' + me.name; }
+
+    orders = d.orders || [];
+
+    // Chime for tickets that appeared since the last poll
+    const live = orders.filter(o => o.status === 'new').map(o => o.id);
+    if (seenIds && live.some(id => !seenIds.has(id))) chime();
+    seenIds = new Set(live);
+
+    render();
+  } catch (e) {
+    // Leave the last good board on screen; the dot tells the kitchen it's stale.
+  }
+  document.getElementById('live-dot').classList.toggle('stale', Date.now() - lastOk > 12000);
+}
+
+async function bump(id, status) {
+  const o = orders.find(x => x.id === id);
+  if (o) { o.status = status; if (status === 'ready') o.readyTs = Date.now(); render(); }  // optimistic
+  await post('/api/order/status', {id, status, byName: 'Kitchen'});
+  load();
+}
+async function voidTicket(id, num) {
+  if (!confirm(`Void order #${num}? The waiter will still see it as cancelled.`)) return;
+  await post('/api/order/status', {id, status: 'void', byName: 'Kitchen'});
+  load();
+}
+function pickPool(id) {
+  poolId = Number(id);
+  localStorage.setItem('kds_pool', poolId);
+  seenIds = null; orders = [];
+  load();
+}
+
+function clock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'});
+}
+
+// ══ Init ══════════════════════════════════════════════════════════════════
+document.getElementById('snd-btn').classList.toggle('off', !soundOn);
+document.getElementById('snd-btn').textContent = soundOn ? '🔔' : '🔕';
+// Browsers hold audio until the screen is touched once — wake it on any tap.
+document.body.addEventListener('click', () => { if (actx && actx.state === 'suspended') actx.resume(); }, {once:true});
+clock(); setInterval(clock, 1000);
+setInterval(tickAges, 1000);   // keep the age timers moving
+load(); setInterval(load, 3000);
+</script>
+</body>
+</html>
