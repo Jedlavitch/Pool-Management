@@ -28,9 +28,6 @@
   .gate-err{color:#dc2626;font-size:.82rem;font-weight:600;margin:0 0 12px;min-height:1em;}
 </style>
 <script src="pos-shared.js"></script>
-<!-- Static demo (GitHub Pages): both are inert when a real server answers. -->
-<script src="demo-data.js"></script>
-<script src="demo-mode.js"></script>
 <style>
   :root {
     /* Brand blue — shades give depth & hierarchy */
@@ -2180,11 +2177,9 @@ async function openGate() {
   go.addEventListener('click', submit);
   pw.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 
-  // With a server, /api/roster's signed_in flag above is the authority. The
-  // remembered id only stands in for it on a static copy, which has no cookie.
-  const noServer = window.MAL_DEMO && window.MAL_DEMO.mode() === 'demo';
-  if (noServer && sessionStorage.getItem('mal-mgmt-signed-in')) gate.classList.add('hidden');
-  else pw.focus();
+  // /api/roster's signed_in flag above is the authority on whether the gate
+  // opens; the server holds the session, not this page.
+  pw.focus();
 }
 
 (async function init() {

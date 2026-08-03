@@ -79,7 +79,7 @@
   </header>
 
   <div class="cards">
-    <a class="card" href="pool-manager.html">
+    <a class="card" id="card-mgmt" href="#">
       <div class="icon">🗂️</div>
       <h2>Management console</h2>
       <p>Schedule shifts, watch the chemical log, see who's on site, run reports and
@@ -87,7 +87,7 @@
       <span class="go">Open</span>
     </a>
 
-    <a class="card" href="worker.html">
+    <a class="card" id="card-staff" href="#">
       <div class="icon">📱</div>
       <h2>Mar-A-Lavitch Staff</h2>
       <p>What the lifeguards carry: clock in, log a reading, take breaks, seat guests and
@@ -95,6 +95,35 @@
       <span class="go">Open</span>
     </a>
   </div>
+
+  <p class="note" id="setup-note" hidden>
+    <b>No server address set yet.</b> These apps run on the club's own server — this page is
+    just the front door. Put its address in <code>app-url.js</code> and both buttons will point
+    at the live app.
+  </p>
+
+  <script src="app-url.js"></script>
+  <script>
+    // The apps are served by server.py, wherever that is running. This page
+    // only ever points at it — it never pretends to be it.
+    (function () {
+      var base = (window.APP_URL || '').replace(/\/+$/, '');
+      var mgmt = document.getElementById('card-mgmt');
+      var staff = document.getElementById('card-staff');
+      if (base) {
+        mgmt.href = base + '/maralavitchmanagement';
+        staff.href = base + '/maralavitchstaff';
+      } else {
+        document.getElementById('setup-note').hidden = false;
+        [mgmt, staff].forEach(function (c) {
+          c.removeAttribute('href');
+          c.style.opacity = '.55';
+          c.style.cursor = 'default';
+          c.querySelector('.go').textContent = 'Server address not set';
+        });
+      }
+    })();
+  </script>
 
   <h3>What it does</h3>
   <ul class="feat">
