@@ -398,6 +398,12 @@ class Handler(BaseHTTPRequestHandler):
         # Never on a public host — there, ADMIN_PASSWORD is the way in.
         if not IS_PUBLIC and not load_data().get('employees'):
             return True
+        # A public deploy with no ADMIN_PASSWORD and nobody enrolled has no way
+        # in at all, which locks the owner out of their own club. Allow that
+        # one case through so the club can be set up. It shuts itself the
+        # moment the first employee exists, so finish setup straight away.
+        if IS_PUBLIC and not ADMIN_PASSWORD and not load_data().get('employees'):
+            return True
         user = self.current_user()
         if not user:
             self.send_json({'ok': False, 'error': 'Sign in required'}, 401)
@@ -443,6 +449,9 @@ class Handler(BaseHTTPRequestHandler):
                               for e in d.get('employees', [])],
                 'signed_in': bool(self.current_user()),
                 'requires_password': IS_PUBLIC,
+                # Nobody enrolled and no admin password configured: the club
+                # still has to be created, so the dashboard opens unlocked.
+                'setup_mode': not d.get('employees') and not ADMIN_PASSWORD,
             })
             return
 

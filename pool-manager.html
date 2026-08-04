@@ -2142,7 +2142,9 @@ async function openGate() {
     const d = await (await fetch('/api/roster')).json();
     staff = (d.employees || []).filter(e => GATE_ROLES.includes(e.role));
     needsPassword = !!d.requires_password;
-    if (d.signed_in) { gate.classList.add('hidden'); return; }
+    // setup_mode: a brand-new install with nobody enrolled yet. There is no
+    // account to sign in as, so let the first person in to create one.
+    if (d.signed_in || d.setup_mode) { gate.classList.add('hidden'); return; }
   } catch (e) { /* handled by the empty-list branch below */ }
 
   if (needsPassword) {
