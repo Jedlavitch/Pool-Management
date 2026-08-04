@@ -608,6 +608,70 @@ const PAYMENTS = {
   comp:    { label: 'Comp',    emoji: '🎁' },
 };
 
+/* ══ Square Point of Sale hand-off ════════════════════════════════════════
+   Square's Reader SDK is native-only — a web page can't talk to card hardware.
+   What a web page *can* do is hand the charge to the Square Point of Sale app
+   already installed on the waiter's phone, which owns the card reader (or Tap
+   to Pay), take the payment there, and come back with a transaction id.
+
+   Worth knowing: `client_id` here is the Square *application* id. It is public
+   by design — it only names the app being launched. Nothing that can move
+   money passes through this code or this server; the merchant credentials live
+   inside Square Point of Sale, signed in on the phone.  */
+const SQUARE = {
+  isAndroid: () => /android/i.test(navigator.userAgent),
+  isIOS: () => /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
+};
+
+// amountCents: integer. callbackUrl: where Square returns the browser afterwards.
+function squareChargeUrl({ appId, amountCents, callbackUrl, note, currency = 'USD' }) {
+  if (SQUARE.isAndroid()) {
+    return 'intent:#Intent;action=com.squareup.pos.action.CHARGE;package=com.squareup;'
+      + `S.com.squareup.pos.WEB_CALLBACK_URI=${callbackUrl};`
+      + `S.com.squareup.pos.CLIENT_ID=${appId};`
+      + 'S.com.squareup.pos.API_VERSION=v2.0;'
+      + `i.com.squareup.pos.TOTAL_AMOUNT=${amountCents};`
+      + `S.com.squareup.pos.CURRENCY_CODE=${currency};`
+      + 'S.com.squareup.pos.TENDER_TYPES=com.squareup.pos.TENDER_CARD,com.squareup.pos.TENDER_CARD_ON_FILE;'
+      + 'end';
+  }
+  const data = {
+    amount_money: { amount: String(amountCents), currency_code: currency },
+    callback_url: callbackUrl,
+    client_id: appId,
+    version: '1.3',
+    notes: (note || '').slice(0, 500),
+    options: { supported_tender_types: ['CREDIT_CARD', 'CARD_ON_FILE'] },
+  };
+  return 'square-commerce-v1://payment/create?data=' + encodeURIComponent(JSON.stringify(data));
+}
+
+// Square answers on the callback URL with different parameter names per platform.
+function squareReturn(search) {
+  const q = new URLSearchParams(search);
+  const err = q.get('error_code') || q.get('com.squareup.pos.ERROR_CODE');
+  const txn = q.get('transaction_id') || q.get('com.squareup.pos.SERVER_TRANSACTION_ID');
+  const client = q.get('client_transaction_id') || q.get('com.squareup.pos.CLIENT_TRANSACTION_ID');
+  if (!err && !txn && !client) return null;      // not a Square return at all
+  return { error: err, transactionId: txn, clientTransactionId: client };
+}
+
+// Square's codes are terse; a waiter mid-shift needs the plain version.
+const SQUARE_ERRORS = {
+  payment_canceled: 'Payment cancelled in Square.',
+  'com.squareup.pos.ERROR_TRANSACTION_CANCELED': 'Payment cancelled in Square.',
+  no_network_connection: 'Square had no connection — try again.',
+  'com.squareup.pos.ERROR_NO_NETWORK': 'Square had no connection — try again.',
+  not_logged_in: 'Square Point of Sale is not signed in on this phone.',
+  'com.squareup.pos.ERROR_NOT_AUTHORIZED': 'This phone is not authorised to take Square payments.',
+  unsupported_api_version: 'Square Point of Sale needs updating on this phone.',
+  invalid_request: "Square rejected the request — check the Application ID on the Pools page.",
+};
+function squareErrorText(code) {
+  return SQUARE_ERRORS[code] || `Square could not take the payment (${code || 'unknown error'}).`;
+}
+
 /* ══ Item modifiers ═══════════════════════════════════════════════════════
    One tap instead of typing. A waiter standing at a lounger in the sun is not
    going to spell out "light ice" on a phone keyboard, and free text arrives at
@@ -632,6 +696,7 @@ function modsFor(category) {
 global.PoolDeck = {
   DW, DH, SEAT_META, SEAT_ORDER, ZONE_COLORS, STATUS_STYLE, STARTER_MENU, PAYMENTS,
   MODIFIERS, modsFor,
+  SQUARE, squareChargeUrl, squareReturn, squareErrorText,
   meta, money, parseMoney, esc, renderMap, LayoutEditor,
   liveReservations, seatReservationMap, seatTabMap, occupancy, cartTotals,
   todayStr, nowHM, fmtHM, minutesLeft,

@@ -1179,6 +1179,7 @@ async function afterLogin() {
   else if (pools.length === 1) pick = Number(pools[0].id);
   if (pick != null) {
     const pl = pools.find(p => Number(p.id) === pick);
+    squareAppIdCache = (pl && pl.square_app_id) || '';
     setPool(pick, pl ? pl.name : '');
     loadHome();
   } else {
@@ -2729,7 +2730,11 @@ function renderCart() {
 
   renderPayExtra(t);
   const btn = document.getElementById('charge-btn');
-  btn.textContent = payMethod === 'comp' ? 'Comp this order' : `Charge ${PD.money(t.total)}`;
+  const viaSquare = payMethod === 'card' && squareReady();
+  btn.textContent = payMethod === 'comp' ? 'Comp this order'
+    : viaSquare ? `Charge ${PD.money(t.total)} with Square`
+    : `Charge ${PD.money(t.total)}`;
+  btn.onclick = viaSquare ? chargeViaSquare : () => submitOrder(false);
   btn.disabled = !cart.length;
   document.querySelector('#screen-cart .btn-next').style.display = payingTabId ? 'none' : 'block';
 }
@@ -2775,6 +2780,92 @@ function bumpQty(i, d) {
   renderCart();
   updateCartBar();
 }
+
+// ══ Square Point of Sale ════════════════════════════════════════════════════
+// The waiter never leaves the deck: tap Charge, Square opens on the same phone,
+// the guest taps their card there, and Square hands the browser back to us.
+const SQ_PENDING = 'pm_square_pending';
+let squareAppIdCache = '';
+function squareAppId() {
+  // posDB is the freshest copy once the POS has loaded, so a manager turning
+  // Square on doesn't need every waiter to sign out and back in.
+  const p = ((typeof posDB !== 'undefined' && posDB?.pools) || [])
+    .find(x => Number(x.id) === Number(activePoolId));
+  return (p && p.square_app_id) || squareAppIdCache;
+}
+function squareReady() { return !!squareAppId(); }
+
+// Square returns to a URL, which reloads this page — so the tab being paid has
+// to survive the round trip somewhere other than memory.
+async function chargeViaSquare() {
+  const t = cartTotals();
+  const amount = t.total;
+  if (amount <= 0) return alert('Nothing to charge.');
+
+  let orderId = payingTabId;
+  if (!orderId) {
+    // Bank the order as an open tab *before* leaving for Square. If the hand-off
+    // fails or the guest walks, the tab is still on the books rather than lost
+    // with the page state.
+    const res = await post('/api/order', {
+      poolId: Number(activePoolId), seatId: cartSeat?.id ?? null, seatLabel: cartSeat?.label || '',
+      items: cart.map(li => ({ menuId: li.menuId, name: li.name, price: li.price / 100,
+                               qty: li.qty, note: li.note, mods: li.mods || [] })),
+      holdOpen: true, empId, empName, payment: 'card',
+    });
+    if (!res.ok) return alert(res.error || 'Could not save the order.');
+    orderId = res.order.id;
+  }
+
+  localStorage.setItem(SQ_PENDING, JSON.stringify({
+    orderId, amount, empId, at: Date.now(),
+  }));
+
+  const url = PD.squareChargeUrl({
+    appId: squareAppId(),
+    amountCents: amount,
+    callbackUrl: location.origin + '/maralavitchstaff',
+    note: `Pool tab #${orderId}`,
+  });
+
+  // Nothing happens if Square Point of Sale isn't installed — the page just
+  // sits there. Say so instead of leaving the waiter tapping a dead button.
+  const left = setTimeout(() => {
+    alert('Square Point of Sale did not open. Install it from the App Store and sign in to your Square account on this phone.');
+    localStorage.removeItem(SQ_PENDING);
+  }, 2500);
+  window.addEventListener('pagehide', () => clearTimeout(left), { once: true });
+  location.href = url;
+}
+
+// Called on load — finishes whatever we handed to Square before the page left.
+async function finishSquareReturn() {
+  const back = PD.squareReturn(location.search);
+  if (!back) return false;
+  const raw = localStorage.getItem(SQ_PENDING);
+  localStorage.removeItem(SQ_PENDING);
+  history.replaceState({}, '', location.pathname);   // don't re-run on refresh
+  if (!raw) return false;
+  const pending = JSON.parse(raw);
+
+  if (back.error) {
+    // The tab is still open and still owed — nothing is lost, it just isn't paid.
+    alert(PD.squareErrorText(back.error) + '\n\nThe tab is still open under Open Tabs.');
+    return true;
+  }
+  const res = await post('/api/order/pay', {
+    id: pending.orderId, payment: 'card',
+    squareTransactionId: back.transactionId || '',
+    squareClientTransactionId: back.clientTransactionId || '',
+  });
+  if (!res.ok) {
+    alert('Square took the payment, but the tab could not be closed here. Close it by hand — the money is already in Square.');
+    return true;
+  }
+  _squareJustPaid = res.order;
+  return true;
+}
+let _squareJustPaid = null;
 
 async function submitOrder(holdOpen) {
   const t = cartTotals();
@@ -3010,6 +3101,15 @@ async function init() {
   if (sessionLives) {
     empId = savedId; empName = savedName;
     await afterLogin();
+    // Square sends the browser back here after a card payment — settle the tab
+    // it was for, then drop the waiter straight on the receipt.
+    try {
+      if (await finishSquareReturn()) {
+        await loadPos(); updateCartBar();
+        if (_squareJustPaid) { showReceipt(_squareJustPaid); _squareJustPaid = null; }
+        else { showTab('order'); setPosView('tabs'); }
+      }
+    } catch (e) { /* a broken return must not block sign-in */ }
   } else {
     await loadNameList();
     show('name');

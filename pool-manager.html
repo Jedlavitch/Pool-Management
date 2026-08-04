@@ -731,6 +731,44 @@
   <div class="stats-grid" id="kt-stats"></div>
 
   <div class="card">
+    <h2>Card Payments — Square</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+      Lets waiters take a card on their own phone. Tapping <b>Charge</b> opens the
+      Square Point of Sale app already on the phone, the guest taps their card
+      there, and the tab closes itself when Square hands the browser back.
+    </p>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>Square Application ID</label>
+        <input type="text" id="sq-app-id" placeholder="sq0idp-…" />
+      </div>
+      <div class="form-group" style="flex:0">
+        <label>&nbsp;</label>
+        <button class="btn btn-primary" onclick="saveSquareAppId()">Save</button>
+      </div>
+    </div>
+    <div id="sq-state" style="font-size:.82rem;font-weight:700;margin-bottom:10px"></div>
+    <details style="font-size:.83rem;color:var(--muted)">
+      <summary style="cursor:pointer;font-weight:700;color:var(--blue-dark)">What you need to do in Square</summary>
+      <ol style="margin:10px 0 0 18px;line-height:1.65">
+        <li>At <b>developer.squareup.com</b>, open your application (or create one).</li>
+        <li>Copy its <b>Application ID</b> into the box above. This one is safe to
+            paste here — it only names your app. Never paste an <i>access token</i>
+            or <i>application secret</i> into this page; nothing here needs one.</li>
+        <li>Under <b>Point of Sale API</b>, add this exact web callback URL:
+            <div class="qr-url" id="sq-callback">…</div></li>
+        <li>On each waiter's phone: install <b>Square Point of Sale</b> and sign in
+            to your Square account. Tap to Pay works on a recent iPhone or NFC
+            Android with no extra reader.</li>
+      </ol>
+      <p style="margin-top:10px">
+        The charge happens inside Square's own app, so no card number ever reaches
+        this server or the pool's WiFi.
+      </p>
+    </details>
+  </div>
+
+  <div class="card">
     <h2>Kitchen Display</h2>
     <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">
       Open this on the tablet or TV in the snack bar. Orders your waiters ring up appear
@@ -2067,8 +2105,44 @@ const KITCHEN_LOOK = {
 const escK = s => String(s ?? '').replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+function renderSquareSetup() {
+  const pool = activePool() || {};
+  const id = pool.square_app_id || '';
+  document.getElementById('sq-app-id').value = id;
+  document.getElementById('sq-callback').textContent = `${location.origin}/maralavitchstaff`;
+  const el = document.getElementById('sq-state');
+  const https = location.protocol === 'https:';
+  if (!id) {
+    el.innerHTML = `<span style="color:var(--muted)">Not linked — waiters see the plain "Charge" button and card payments are only recorded, not taken.</span>`;
+  } else if (!https) {
+    // Square will not call back to a plain-http address, so this would fail on
+    // the deck even though the settings look right.
+    el.innerHTML = `<span style="color:var(--yellow)">⚠️ Linked, but this dashboard is on http. Square only calls back to an https address — use the public URL, not the pool's LAN address.</span>`;
+  } else {
+    el.innerHTML = `<span style="color:var(--green)">✓ Linked. Waiters with Square Point of Sale on their phone can charge cards.</span>`;
+  }
+}
+
+async function saveSquareAppId() {
+  const id = document.getElementById('sq-app-id').value.trim();
+  const pool = activePool();
+  if (!pool) return alert('No pool selected.');
+  if (id && /^(sq0[a-z]{3}-)?[A-Za-z0-9_\-]{10,}$/.test(id) === false) {
+    if (!confirm("That doesn't look like a Square Application ID (they usually start with sq0idp-). Save it anyway?")) return;
+  }
+  // A token is a secret and has no business here; the deep link only needs the id.
+  if (/^(EAAA|sq0csp-)/.test(id)) {
+    return alert('That looks like an access token or application secret, not an Application ID.\n\nDon\'t store it here — this value is sent to every waiter\'s phone. Paste the Application ID instead (it starts with sq0idp-).');
+  }
+  const res = await api.post('/api/pool/update', { id: pool.id, square_app_id: id });
+  if (!res.ok) return alert(res.error || 'Could not save.');
+  await refresh();
+  renderSquareSetup();
+}
+
 async function renderKitchen() {
   document.getElementById('kds-url').textContent = `${location.origin}/kds`;
+  renderSquareSetup();
   let orders = [];
   try {
     orders = (await (await fetch(`/api/orders?poolId=${activePoolId}`)).json()).orders || [];

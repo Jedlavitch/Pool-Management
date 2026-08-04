@@ -598,6 +598,12 @@ class Handler(BaseHTTPRequestHandler):
                 for k in ('name', 'address', 'status'):
                     if k in body:
                         pool[k] = body[k]
+                # Square's application id is a public identifier, not a secret —
+                # it only names the app in the deep link. The credentials that
+                # actually move money live inside Square Point of Sale on the
+                # waiter's phone, and never come near this server.
+                if 'square_app_id' in body:
+                    pool['square_app_id'] = (body['square_app_id'] or '').strip()
                 if 'tax_rate' in body:
                     try:
                         pool['tax_rate'] = max(0.0, min(30.0, float(body['tax_rate'])))
@@ -1323,6 +1329,12 @@ class Handler(BaseHTTPRequestHandler):
                 'status': 'paid',
                 'paidAt': datetime.now().strftime('%H:%M'),
             })
+            # Receipt trail back to Square. Stored so a disputed charge can be
+            # matched to the tab that produced it without guessing by timestamp.
+            for src, dest in (('squareTransactionId', 'squareTransactionId'),
+                              ('squareClientTransactionId', 'squareClientTransactionId')):
+                if body.get(src):
+                    order[dest] = str(body[src])[:80]
             save_data(data)
             self.send_json({'ok': True, 'order': order})
 
