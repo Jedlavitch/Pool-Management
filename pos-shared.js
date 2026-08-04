@@ -608,8 +608,30 @@ const PAYMENTS = {
   comp:    { label: 'Comp',    emoji: '🎁' },
 };
 
+/* ══ Item modifiers ═══════════════════════════════════════════════════════
+   One tap instead of typing. A waiter standing at a lounger in the sun is not
+   going to spell out "light ice" on a phone keyboard, and free text arrives at
+   the kitchen as "No Ice", "no ice", "w/o ice" — three things to read instead
+   of one. These are the customisations that come up over and over; anything
+   unusual still goes in the note field beside them. */
+const MODIFIERS = {
+  Drinks: ['No ice', 'Light ice', 'Extra ice', 'No straw', 'With lid',
+           'Extra lemon', 'Diet', 'Unsweetened', 'Large cup'],
+  Grill:  ['No cheese', 'No onion', 'No pickles', 'Well done', 'Extra crispy',
+           'Plain', 'Add cheese', 'Gluten-free bun', 'Sauce on side'],
+  Snacks: ['Cup, not cone', 'Extra napkins', 'Cut in half'],
+  Shop:   [],
+  Passes: [],
+};
+// Falls back to drink modifiers for a custom category the manager invented,
+// since drinks are what get customised most at a pool.
+function modsFor(category) {
+  return MODIFIERS[category] || MODIFIERS.Drinks;
+}
+
 global.PoolDeck = {
   DW, DH, SEAT_META, SEAT_ORDER, ZONE_COLORS, STATUS_STYLE, STARTER_MENU, PAYMENTS,
+  MODIFIERS, modsFor,
   meta, money, parseMoney, esc, renderMap, LayoutEditor,
   liveReservations, seatReservationMap, seatTabMap, occupancy, cartTotals,
   todayStr, nowHM, fmtHM, minutesLeft,

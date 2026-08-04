@@ -1253,8 +1253,13 @@ class Handler(BaseHTTPRequestHandler):
                 subtotal += line_total
                 if taxable:
                     taxable_base += line_total
+                # Tap-selected customisations ("No ice", "Well done"). Kept as a
+                # list rather than folded into the note so the kitchen can show
+                # them as chips and sales can count them later.
+                mods = [str(m).strip()[:40] for m in (li.get('mods') or []) if str(m).strip()][:8]
                 lines.append({'menuId': li.get('menuId'), 'name': name, 'price': price,
-                              'qty': qty, 'note': (li.get('note') or '').strip(), 'total': line_total})
+                              'qty': qty, 'note': (li.get('note') or '').strip(),
+                              'mods': mods, 'total': line_total})
             if not lines:
                 self.send_json({'ok': False, 'error': 'Order is empty'}, 400); return
             tax = int(round(taxable_base * tax_rate / 100.0))

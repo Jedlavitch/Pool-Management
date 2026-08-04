@@ -672,6 +672,14 @@ select.form-inp{cursor:pointer;}
 .cart-note{width:100%;margin-top:8px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;
   font-size:.78rem;font-family:inherit;background:var(--bg);color:var(--text);}
 
+/* Customisation chips — sized for a thumb, not a cursor */
+.mod-row{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;}
+.mod-chip{padding:7px 11px;border:1.5px solid var(--border);border-radius:99px;background:var(--bg);
+  color:var(--muted);font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit;
+  transition:background .12s,border-color .12s,color .12s;}
+.mod-chip:active{transform:scale(.96);}
+.mod-chip.on{background:var(--yellow);border-color:var(--yellow);color:#fff;}
+
 /* Totals */
 .tot-card{background:var(--card);border-radius:var(--r-sm);padding:13px 14px;box-shadow:var(--shadow);margin-bottom:12px;}
 .tot-row{display:flex;justify-content:space-between;font-size:.85rem;padding:4px 0;color:var(--muted);font-weight:600;}
@@ -2588,12 +2596,38 @@ function renderMenuGrid() {
 function addToCart(menuId) {
   const m = menuById()[menuId];
   if (!m) return;
-  const line = cart.find(li => li.menuId === menuId && !li.note);
+  // Only merge into an untouched line — once a line has been customised, a
+  // second tap means a second drink made the normal way, not one more of that.
+  const line = cart.find(li => li.menuId === menuId && !li.note && !(li.mods || []).length);
   if (line) line.qty++;
-  else cart.push({ menuId, name: m.name, price: m.price, qty: 1, note: '' });
+  else cart.push({ menuId, name: m.name, price: m.price, qty: 1, note: '',
+                   category: m.category || '', mods: [] });
   renderMenuGrid();
   updateCartBar();
   if (navigator.vibrate) navigator.vibrate(8);
+}
+
+// ── Item customisation ──────────────────────────────────────────────────────
+// Chips for the customisations that come up constantly, so the kitchen reads
+// the same words every time instead of nine spellings of "no ice".
+function modChips(li, i) {
+  const opts = PD.modsFor(li.category);
+  if (!opts.length) return '';
+  const on = li.mods || [];
+  // Anything typed in an earlier session (or added by hand) still shows as a chip
+  const extra = on.filter(m => !opts.includes(m));
+  return `<div class="mod-row">${[...opts, ...extra].map(m =>
+    `<button class="mod-chip ${on.includes(m) ? 'on' : ''}"
+       onclick="toggleMod(${i},'${m.replace(/'/g, "\\'")}')">${PD.esc(m)}</button>`).join('')}</div>`;
+}
+function toggleMod(i, mod) {
+  const li = cart[i];
+  if (!li) return;
+  li.mods = li.mods || [];
+  const at = li.mods.indexOf(mod);
+  if (at >= 0) li.mods.splice(at, 1); else li.mods.push(mod);
+  renderCart();
+  if (navigator.vibrate) navigator.vibrate(6);
 }
 
 function cartTotals() { return PD.cartTotals(cart, menuById(), taxRate()); }
@@ -2679,7 +2713,8 @@ function renderCart() {
         </div>
         <div class="cart-line-tot">${PD.money(li.price * li.qty)}</div>
       </div>
-      <input class="cart-note" placeholder="Note (no onions, extra ice…)" value="${PD.esc(li.note || '')}"
+      ${payingTabId ? '' : modChips(li, i)}
+      <input class="cart-note" placeholder="Anything else the kitchen should know…" value="${PD.esc(li.note || '')}"
         oninput="cart[${i}].note=this.value" ${payingTabId ? 'disabled' : ''}/>
     </div>`).join('') : '<p class="empty">Cart is empty.</p>';
 
@@ -2760,7 +2795,8 @@ async function submitOrder(holdOpen) {
   } else {
     res = await post('/api/order', {
       poolId: Number(activePoolId), seatId: cartSeat?.id ?? null, seatLabel: cartSeat?.label || '',
-      items: cart.map(li => ({ menuId: li.menuId, name: li.name, price: li.price / 100, qty: li.qty, note: li.note })),
+      items: cart.map(li => ({ menuId: li.menuId, name: li.name, price: li.price / 100,
+                               qty: li.qty, note: li.note, mods: li.mods || [] })),
       holdOpen, empId, empName, ...payload,
     });
   }
