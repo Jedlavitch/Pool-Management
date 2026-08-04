@@ -672,6 +672,7 @@
 
   <div class="card">
     <h2>Menu <span id="menu-count" style="font-weight:400;color:var(--muted);font-size:.82rem"></span></h2>
+    <div id="menu-free-warn"></div>
     <div id="menu-list"></div>
     <div id="menu-seed" style="margin-top:12px"></div>
   </div>
@@ -706,6 +707,18 @@
       <button class="btn btn-success" id="layout-save" onclick="mgrSaveLayout()" disabled>Save Layout</button>
       <button class="btn" style="background:#f3f4f6" onclick="mgrDiscardLayout()">Discard Changes</button>
       <button class="btn btn-danger" style="margin-left:auto" onclick="mgrClearLayout()">Clear All</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Guest Ordering Codes</h2>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:12px">
+      One QR per lounger. A guest scans the code on their chair and orders drinks straight to it —
+      the ticket lands in the POS as an open tab and on the kitchen screen, with the chair already attached.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary" onclick="openChairQR()">🪑 Print chair QR codes</button>
+      <button class="btn" style="background:#f3f4f6" onclick="previewGuestOrdering()">👀 Preview what guests see</button>
+      <span class="range-hint" id="qr-hint"></span>
     </div>
   </div>
 
@@ -1722,7 +1735,7 @@ async function renderMenu() {
           <b>${PD.esc(m.name)}</b>${m.active === false ? ' <span class="badge badge-warn">HIDDEN</span>' : ''}
           <div>${m.taxable === false ? 'No sales tax' : 'Taxable'}${m.desc ? ' · ' + PD.esc(m.desc) : ''}</div>
         </div>
-        <div class="pr">${money(m.price)}</div>
+        <div class="pr" ${m.price ? '' : 'style="color:var(--red)"'}>${money(m.price)}${m.price ? '' : ' ⚠️'}</div>
         <button class="btn btn-sm btn-primary" onclick="editMenuItem(${m.id})">Edit</button>
         <button class="btn btn-danger" onclick="deleteMenuItem(${m.id})">Delete</button>
       </div>`).join('')).join('')
@@ -1730,6 +1743,14 @@ async function renderMenu() {
 
   document.getElementById('menu-seed').innerHTML = items.length ? '' :
     `<button class="btn btn-primary" onclick="seedMenu()">🍔 Load a starter menu (20 common items)</button>`;
+
+  const free = items.filter(m => !m.price && m.active !== false);
+  document.getElementById('menu-free-warn').innerHTML = free.length
+    ? `<div class="dirty-note" style="background:var(--red-light);color:#991b1b">
+         ⚠️ ${free.length} item${free.length === 1 ? '' : 's'} on the live menu have no price and will ring up as
+         <strong>$0.00</strong>: ${free.map(m => PD.esc(m.name)).join(', ')}.
+         Staff and guests can order ${free.length === 1 ? 'it' : 'them'} for free until you set a price.</div>`
+    : '';
 }
 
 function resetMenuForm() {
@@ -1765,6 +1786,10 @@ async function saveMenuItem() {
     active: document.getElementById('mi-active').checked,
   };
   if (!body.name) return alert('Give the item a name.');
+  // A blank price silently becomes $0.00 and the item rings up free — which is
+  // easy to miss on a list of twenty and costs real money once guests can order.
+  if (PD.parseMoney(body.price) === 0 &&
+      !confirm(`"${body.name}" has no price, so it will ring up as $0.00 — staff and guests could order it for free.\n\nSave it as a free item anyway?`)) return;
   const id = v('mi-id');
   const res = id ? await api.post('/api/menu/update', { id: Number(id), ...body })
                  : await api.post('/api/menu', { poolId: Number(activePoolId), ...body });
@@ -1893,6 +1918,18 @@ function mgrClearLayout() {
   mgrEditor.clearAll();
 }
 
+function openChairQR() {
+  const seats = (mgrLayout().seats || []).filter(s =>
+    s.bookable !== false && PD.meta(s.type).bookable && s.label);
+  if (!seats.length) return alert('Lay out some chairs and save the deck first — there\'s nothing to print codes for yet.');
+  window.open(`/chair-qr?pool=${activePoolId}`, '_blank');
+}
+function previewGuestOrdering() {
+  const seat = (mgrLayout().seats || []).find(s =>
+    s.bookable !== false && PD.meta(s.type).bookable && s.label);
+  window.open(`/order?pool=${activePoolId}${seat ? '&seat=' + seat.id : ''}`, '_blank');
+}
+
 function renderOccupancy() {
   const layout = mgrLayout();
   const dateStr = PD.todayStr();
@@ -1901,6 +1938,13 @@ function renderOccupancy() {
   const occ = PD.occupancy(layout, resMap);
   const waiting = (DB.waitlist || []).filter(w =>
     Number(w.poolId) === Number(activePoolId) && w.date === dateStr && w.status === 'waiting').length;
+
+  const codeable = ((layout.seats) || []).filter(s =>
+    s.bookable !== false && PD.meta(s.type).bookable && s.label).length;
+  const hint = document.getElementById('qr-hint');
+  if (hint) hint.textContent = codeable
+    ? `${codeable} chair${codeable === 1 ? '' : 's'} ready to print`
+    : 'No labelled chairs yet — build the deck above first.';
 
   document.getElementById('occ-stats').innerHTML = `
     <div class="stat-box"><div class="val" style="color:var(--green)">${occ.open}</div><div class="lbl">Open</div></div>

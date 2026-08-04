@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#0284c7"/>
+<title>Order to your chair</title>
+<style>
+:root{
+  --bg:#f0f9ff; --card:#fff; --card2:#f1f5f9;
+  --text:#0f172a; --muted:#64748b; --border:#e2e8f0;
+  --blue:#0284c7; --blue-dk:#0369a1; --blue-lt:#e0f2fe;
+  --green:#16a34a; --green-lt:#dcfce7;
+  --red:#dc2626; --yellow:#d97706; --yellow-lt:#fef3c7;
+  --shadow:0 1px 3px rgba(0,0,0,.08); --shadow-md:0 6px 20px rgba(0,0,0,.12);
+  --r:16px; --r-sm:11px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0d1117; --card:#161b22; --card2:#21262d;
+    --text:#e6edf3; --muted:#8b949e; --border:#30363d;
+    --blue:#58a6ff; --blue-dk:#79c0ff; --blue-lt:#16263d;
+    --green:#3fb950; --green-lt:#0f2a17;
+    --red:#f85149; --yellow:#e3b341; --yellow-lt:#2a1f00;
+    --shadow:0 1px 3px rgba(0,0,0,.5); --shadow-md:0 6px 20px rgba(0,0,0,.6);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;max-width:480px;margin:0 auto;
+  -webkit-font-smoothing:antialiased;letter-spacing:-.011em;padding-bottom:96px;
+}
+header{
+  background:linear-gradient(135deg,var(--blue) 0%,var(--blue-dk) 100%);color:#fff;
+  padding:18px 16px;position:sticky;top:0;z-index:40;box-shadow:0 2px 12px rgba(0,0,0,.18);
+}
+.h-top{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.h-title{font-size:1.15rem;font-weight:800;letter-spacing:-.02em;}
+.h-sub{font-size:.76rem;opacity:.85;margin-top:3px;}
+.chair-chip{
+  background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.35);color:#fff;
+  border-radius:20px;padding:7px 13px;font-size:.8rem;font-weight:800;cursor:pointer;
+  font-family:inherit;white-space:nowrap;
+}
+.screen{display:none;padding:16px;}
+.screen.active{display:block;}
+.lbl{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--muted);margin:18px 0 8px;}
+.lbl:first-child{margin-top:4px;}
+.card{background:var(--card);border-radius:var(--r);padding:16px;box-shadow:var(--shadow);margin-bottom:12px;}
+.empty{text-align:center;padding:30px 16px;color:var(--muted);font-size:.88rem;line-height:1.5;}
+
+/* Chair picker */
+.intro{text-align:center;padding:26px 8px 20px;}
+.intro .em{font-size:2.8rem;}
+.intro h1{font-size:1.35rem;font-weight:800;margin-top:10px;}
+.intro p{font-size:.9rem;color:var(--muted);margin-top:7px;line-height:1.5;}
+.seat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.seat-btn{padding:15px 4px;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--card);
+  color:var(--text);font-size:.92rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:var(--shadow);}
+.seat-btn:active{background:var(--blue-lt);border-color:var(--blue);}
+
+/* Menu */
+.cats{display:flex;gap:7px;overflow-x:auto;padding-bottom:9px;margin-bottom:6px;}
+.cats::-webkit-scrollbar{display:none;}
+.cat{flex-shrink:0;padding:9px 15px;border-radius:20px;border:1.5px solid var(--border);background:var(--card);
+  color:var(--muted);font-size:.8rem;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;}
+.cat.on{background:var(--blue);border-color:var(--blue);color:#fff;}
+.item{background:var(--card);border-radius:var(--r-sm);padding:13px 14px;margin-bottom:8px;box-shadow:var(--shadow);
+  display:flex;align-items:center;gap:13px;cursor:pointer;font-family:inherit;width:100%;text-align:left;
+  border:1.5px solid transparent;color:var(--text);}
+.item:active{border-color:var(--blue);}
+.item .em{font-size:1.7rem;flex-shrink:0;width:34px;text-align:center;}
+.item .body{flex:1;min-width:0;}
+.item .nm{font-size:.94rem;font-weight:800;}
+.item .ds{font-size:.76rem;color:var(--muted);margin-top:2px;line-height:1.35;}
+.item .pr{font-size:.95rem;font-weight:800;color:var(--blue);white-space:nowrap;}
+.item .badge{background:var(--green);color:#fff;border-radius:11px;min-width:22px;height:22px;padding:0 6px;
+  font-size:.72rem;font-weight:800;line-height:22px;text-align:center;}
+
+/* Cart bar */
+.bar{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;padding:12px 16px 22px;z-index:50;
+  background:linear-gradient(to top,var(--bg) 62%,transparent);
+  transform:translateY(130%);opacity:0;visibility:hidden;
+  transition:transform .24s cubic-bezier(.2,.9,.3,1),opacity .18s,visibility .24s;}
+.bar.up{transform:translateY(0);opacity:1;visibility:visible;}
+.bar button{width:100%;padding:16px 18px;border:none;border-radius:var(--r);background:var(--blue);color:#fff;
+  font-size:.98rem;font-weight:800;cursor:pointer;font-family:inherit;
+  display:flex;justify-content:space-between;align-items:center;box-shadow:0 8px 24px rgba(2,132,199,.45);}
+
+/* Cart lines */
+.line{background:var(--card);border-radius:var(--r-sm);padding:12px 13px;margin-bottom:8px;box-shadow:var(--shadow);}
+.line-top{display:flex;align-items:center;gap:11px;}
+.line-nm{flex:1;min-width:0;}
+.line-nm .n{font-size:.9rem;font-weight:800;}
+.line-nm .p{font-size:.74rem;color:var(--muted);margin-top:1px;}
+.line-tot{font-size:.92rem;font-weight:800;min-width:58px;text-align:right;}
+.qty{display:flex;align-items:center;gap:3px;background:var(--card2);border-radius:9px;padding:3px;}
+.qty button{width:30px;height:30px;border:none;border-radius:7px;background:var(--card);color:var(--text);
+  font-size:1.05rem;font-weight:800;cursor:pointer;font-family:inherit;line-height:1;box-shadow:var(--shadow);}
+.qty span{min-width:24px;text-align:center;font-size:.88rem;font-weight:800;}
+.note-in{width:100%;margin-top:9px;padding:9px 11px;border:1.5px solid var(--border);border-radius:9px;
+  font-size:.8rem;font-family:inherit;background:var(--bg);color:var(--text);}
+
+/* Totals + fields */
+.tot{display:flex;justify-content:space-between;font-size:.87rem;padding:5px 0;color:var(--muted);font-weight:600;}
+.tot.grand{border-top:1.5px solid var(--border);margin-top:7px;padding-top:10px;font-size:1.15rem;
+  font-weight:800;color:var(--text);}
+.fld{margin-bottom:12px;}
+.fld label{display:block;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--muted);margin-bottom:6px;}
+.fld input,.fld textarea{width:100%;padding:13px;border:1.5px solid var(--border);border-radius:var(--r-sm);
+  font-size:.95rem;font-family:inherit;background:var(--card);color:var(--text);}
+.fld input:focus,.fld textarea:focus{outline:none;border-color:var(--blue);}
+.pay-opts{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+.pay-opt{display:flex;align-items:flex-start;gap:11px;padding:14px;border:1.5px solid var(--border);
+  border-radius:var(--r-sm);background:var(--card);cursor:pointer;font-family:inherit;text-align:left;color:var(--text);}
+.pay-opt.on{border-color:var(--blue);background:var(--blue-lt);}
+.pay-opt .e{font-size:1.35rem;line-height:1;}
+.pay-opt .t{font-size:.9rem;font-weight:800;}
+.pay-opt .d{font-size:.76rem;color:var(--muted);margin-top:3px;line-height:1.4;}
+.go-btn{width:100%;padding:17px;border:none;border-radius:var(--r);background:var(--green);color:#fff;
+  font-size:1rem;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-md);}
+.go-btn:disabled{background:var(--border);color:var(--muted);cursor:not-allowed;box-shadow:none;}
+.ghost{width:100%;padding:13px;background:none;border:none;color:var(--muted);font-size:.84rem;
+  font-weight:700;cursor:pointer;font-family:inherit;margin-top:10px;}
+
+/* Ticket / status */
+.tick{background:var(--card);border-radius:var(--r);padding:24px 18px;box-shadow:var(--shadow-md);text-align:center;}
+.tick .em{font-size:3rem;}
+.tick h2{font-size:1.3rem;font-weight:800;margin:9px 0 4px;}
+.tick .sub{font-size:.88rem;color:var(--muted);line-height:1.5;}
+.tick .num{display:inline-block;background:var(--blue-lt);color:var(--blue);border-radius:12px;
+  padding:9px 18px;font-size:1.5rem;font-weight:800;margin:14px 0 6px;}
+.steps{display:flex;gap:5px;margin:20px 0 6px;}
+.step{flex:1;text-align:center;}
+.step .dot{width:100%;height:5px;border-radius:3px;background:var(--border);margin-bottom:7px;}
+.step.on .dot{background:var(--green);}
+.step .t{font-size:.63rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);}
+.step.on .t{color:var(--green);}
+.rcpt{text-align:left;border-top:1.5px dashed var(--border);margin-top:18px;padding-top:14px;font-size:.84rem;}
+.rcpt div{display:flex;justify-content:space-between;padding:3px 0;}
+.send-row{display:flex;gap:8px;margin-top:14px;}
+.send-row a{flex:1;padding:13px;border-radius:var(--r-sm);background:var(--card2);color:var(--text);
+  border:1.5px solid var(--border);font-size:.86rem;font-weight:800;text-decoration:none;text-align:center;}
+.warn{background:var(--yellow-lt);color:var(--yellow);border-radius:var(--r-sm);padding:12px 14px;
+  font-size:.82rem;font-weight:700;margin-bottom:12px;line-height:1.45;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="h-top">
+    <div>
+      <div class="h-title" id="h-title">Poolside Ordering</div>
+      <div class="h-sub" id="h-sub">Loading the menu…</div>
+    </div>
+    <button class="chair-chip" id="chair-chip" onclick="pickChair()" style="display:none"></button>
+  </div>
+</header>
+
+<!-- CHAIR PICKER -->
+<div class="screen active" id="s-chair">
+  <div class="intro">
+    <div class="em">🏊</div>
+    <h1>Where are you sitting?</h1>
+    <p>Pick your chair so we know where to bring your drinks.<br/>The number is on the sticker on your lounger.</p>
+  </div>
+  <div class="fld">
+    <label>Type your chair number</label>
+    <input id="chair-typed" placeholder="e.g. A7" autocomplete="off" autocapitalize="characters"
+      onkeydown="if(event.key==='Enter')useTypedChair()"/>
+  </div>
+  <button class="go-btn" onclick="useTypedChair()">That's my chair →</button>
+  <p class="lbl">Or tap it below</p>
+  <div class="seat-grid" id="seat-grid"></div>
+</div>
+
+<!-- MENU -->
+<div class="screen" id="s-menu">
+  <div id="menu-warn"></div>
+  <div class="cats" id="cats"></div>
+  <div id="items"></div>
+</div>
+
+<!-- CART -->
+<div class="screen" id="s-cart">
+  <p class="lbl">Your order</p>
+  <div id="lines"></div>
+  <div class="card" id="totals"></div>
+
+  <p class="lbl">How would you like to pay?</p>
+  <div class="pay-opts" id="pay-opts"></div>
+  <div id="pay-extra"></div>
+
+  <p class="lbl">Your details</p>
+  <div class="fld">
+    <label>Name</label>
+    <input id="g-name" placeholder="So we can call it out" autocomplete="name"/>
+  </div>
+  <div class="fld">
+    <label>Phone or email — for your receipt (optional)</label>
+    <input id="g-contact" placeholder="you@example.com or 555-0123" autocomplete="email"/>
+  </div>
+  <div class="fld">
+    <label>Anything else? (optional)</label>
+    <textarea id="g-note" rows="2" placeholder="Extra ice, no straw, allergies…"></textarea>
+  </div>
+
+  <button class="go-btn" id="place-btn" onclick="placeOrder()">Send order to the bar</button>
+  <button class="ghost" onclick="showScreen('menu')">← Add something else</button>
+</div>
+
+<!-- TICKET -->
+<div class="screen" id="s-ticket">
+  <div id="ticket-body"></div>
+  <button class="ghost" onclick="startOver()">Order something else</button>
+</div>
+
+<div class="bar" id="bar">
+  <button onclick="showScreen('cart')">
+    <span id="bar-n">0 items</span><span id="bar-t">$0.00</span>
+  </button>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   Guest ordering. Talks only to /api/guest/* — the endpoints that hand back a
+   menu and one's own ticket, and nothing else about the club.
+   ══════════════════════════════════════════════════════════════════════════ */
+const qs = new URLSearchParams(location.search);
+const POOL = Number(qs.get('pool'));
+let DATA = null, cart = [], cat = 'All', seat = null, pay = 'deliver';
+let ticket = null, poll = null;
+
+const money = c => '$' + ((Number(c) || 0) / 100).toFixed(2);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = id => document.getElementById(id);
+
+function showScreen(n) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $('s-' + n).classList.add('active');
+  window.scrollTo(0, 0);
+  $('bar').classList.toggle('up', n === 'menu' && cart.length > 0);
+  $('chair-chip').style.display = (seat && n !== 'chair') ? 'block' : 'none';
+}
+
+async function boot() {
+  if (!POOL) return fail('This link is missing its pool code. Ask a staff member for the right QR code.');
+  let r;
+  try {
+    r = await (await fetch('/api/guest/menu?pool=' + encodeURIComponent(POOL))).json();
+  } catch (e) { return fail("Couldn't reach the pool. Check your phone's connection and try again."); }
+  if (!r.ok) return fail(r.error || 'That pool code isn\'t recognised.');
+  DATA = r;
+  $('h-title').textContent = r.pool.name || 'Poolside Ordering';
+
+  if (r.pool.status === 'closed') {
+    return fail('The pool is closed right now, so the bar isn\'t taking orders. See you next time!');
+  }
+  $('h-sub').textContent = r.pool.status === 'limited'
+    ? '⚠️ Limited service today' : 'Order to your chair';
+
+  // A per-chair QR carries its seat; a generic one drops you on the picker.
+  const wanted = qs.get('seat');
+  const found = r.seats.find(s => String(s.id) === String(wanted)
+                              || s.label.toUpperCase() === String(wanted || '').toUpperCase());
+  if (found) { setSeat(found); }
+  else { renderSeatGrid(); showScreen('chair'); }
+}
+
+function fail(msg) {
+  $('h-sub').textContent = '';
+  $('s-chair').innerHTML = `<div class="empty" style="padding-top:60px">${esc(msg)}</div>`;
+  showScreen('chair');
+}
+
+function renderSeatGrid() {
+  $('seat-grid').innerHTML = DATA.seats.length
+    ? DATA.seats.map(s => `<button class="seat-btn" onclick="setSeat(${s.id})">${esc(s.label)}</button>`).join('')
+    : '';
+  if (!DATA.seats.length) {
+    $('seat-grid').innerHTML = '<p class="empty" style="grid-column:1/-1">No chairs are set up yet — ask a staff member to take your order.</p>';
+  }
+}
+
+function useTypedChair() {
+  const v = ($('chair-typed').value || '').trim().toUpperCase();
+  if (!v) return;
+  const s = DATA.seats.find(x => x.label.toUpperCase() === v);
+  if (!s) return alert(`We can't find chair "${v}". Check the sticker on your lounger, or tap your chair in the list below.`);
+  setSeat(s);
+}
+
+function setSeat(s) {
+  seat = typeof s === 'object' ? s : DATA.seats.find(x => String(x.id) === String(s));
+  if (!seat) return;
+  $('chair-chip').textContent = '🪑 ' + seat.label;
+  renderCats(); renderItems();
+  showScreen('menu');
+}
+function pickChair() { renderSeatGrid(); showScreen('chair'); }
+
+function renderCats() {
+  const cats = ['All', ...new Set(DATA.menu.map(m => m.category || 'General'))];
+  if (!cats.includes(cat)) cat = 'All';
+  $('cats').innerHTML = cats.map(c =>
+    `<button class="cat ${c === cat ? 'on' : ''}" onclick="cat=${JSON.stringify(c).replace(/"/g, '&quot;')};renderCats();renderItems()">${esc(c)}</button>`).join('');
+}
+
+function renderItems() {
+  const list = DATA.menu.filter(m => cat === 'All' || (m.category || 'General') === cat);
+  const n = {};
+  cart.forEach(li => n[li.menuId] = (n[li.menuId] || 0) + li.qty);
+  $('items').innerHTML = list.length ? list.map(m => `
+    <button class="item" onclick="add(${m.id})">
+      <span class="em">${m.emoji || '🥤'}</span>
+      <span class="body">
+        <span class="nm">${esc(m.name)}</span>
+        ${m.desc ? `<span class="ds">${esc(m.desc)}</span>` : ''}
+      </span>
+      <span class="pr">${money(m.price)}</span>
+      ${n[m.id] ? `<span class="badge">${n[m.id]}</span>` : ''}
+    </button>`).join('')
+    : '<p class="empty">Nothing on the menu in this section yet.</p>';
+}
+
+function add(id) {
+  const m = DATA.menu.find(x => x.id === id);
+  if (!m) return;
+  const li = cart.find(x => x.menuId === id && !x.note);
+  if (li) li.qty++;
+  else cart.push({menuId: id, name: m.name, price: m.price, qty: 1, note: ''});
+  renderItems(); updateBar();
+  if (navigator.vibrate) navigator.vibrate(8);
+}
+
+function totals() {
+  let sub = 0, taxable = 0;
+  cart.forEach(li => {
+    const m = DATA.menu.find(x => x.id === li.menuId);
+    const t = (m ? m.price : li.price) * li.qty;
+    sub += t;
+    if (!m || m.taxable !== false) taxable += t;
+  });
+  const tax = Math.round(taxable * (Number(DATA.pool.tax_rate) || 0) / 100);
+  return {sub, tax, total: sub + tax};
+}
+
+function updateBar() {
+  const n = cart.reduce((s, li) => s + li.qty, 0), t = totals();
+  $('bar-n').textContent = `${n} item${n === 1 ? '' : 's'}`;
+  $('bar-t').textContent = money(t.total) + '  ›';
+  $('bar').classList.toggle('up', n > 0 && $('s-menu').classList.contains('active'));
+}
+
+function bump(i, d) {
+  cart[i].qty += d;
+  if (cart[i].qty <= 0) cart.splice(i, 1);
+  if (!cart.length) return showScreen('menu'), renderItems(), updateBar();
+  renderCart(); updateBar();
+}
+
+function renderCart() {
+  $('lines').innerHTML = cart.map((li, i) => `
+    <div class="line">
+      <div class="line-top">
+        <div class="line-nm"><div class="n">${esc(li.name)}</div><div class="p">${money(li.price)} each</div></div>
+        <div class="qty"><button onclick="bump(${i},-1)">−</button><span>${li.qty}</span><button onclick="bump(${i},1)">+</button></div>
+        <div class="line-tot">${money(li.price * li.qty)}</div>
+      </div>
+      <input class="note-in" placeholder="Note for this item" value="${esc(li.note)}" oninput="cart[${i}].note=this.value"/>
+    </div>`).join('');
+  const t = totals();
+  $('totals').innerHTML = `
+    <div class="tot"><span>Subtotal</span><span>${money(t.sub)}</span></div>
+    <div class="tot"><span>Tax</span><span>${money(t.tax)}</span></div>
+    <div class="tot grand"><span>Total</span><span>${money(t.total)}</span></div>`;
+  renderPay();
+}
+
+const PAY_OPTS = [
+  {k:'deliver', e:'💵', t:'Pay when it arrives', d:'Your server brings the drinks and takes cash or card at your chair.'},
+  {k:'account', e:'🏠', t:'Charge my member account', d:'Added to your family account and settled at the end of the season.'},
+  {k:'card',    e:'💳', t:'Pay by card now',       d:'Card payments aren\'t switched on yet — pick one of the options above.'},
+];
+function renderPay() {
+  $('pay-opts').innerHTML = PAY_OPTS.map(o =>
+    `<button class="pay-opt ${pay === o.k ? 'on' : ''}" onclick="setPay('${o.k}')">
+       <span class="e">${o.e}</span>
+       <span><span class="t">${o.t}</span><span class="d">${o.d}</span></span>
+     </button>`).join('');
+  $('pay-extra').innerHTML = pay === 'account'
+    ? `<div class="fld"><label>Member account name or number</label>
+         <input id="g-account" placeholder="e.g. Berg family #204" autocomplete="off"/></div>`
+    : pay === 'card'
+    ? `<div class="warn">💳 Card payment isn't available yet — the club still needs to connect a card processor. Please choose "Pay when it arrives" or your member account.</div>`
+    : '';
+  $('place-btn').disabled = pay === 'card';
+}
+function setPay(k) { pay = k; renderCart(); }
+
+async function placeOrder() {
+  const btn = $('place-btn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  let r;
+  try {
+    r = await (await fetch('/api/guest/order', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        poolId: POOL, seatId: seat.id,
+        items: cart.map(li => ({menuId: li.menuId, qty: li.qty, note: li.note})),
+        payment: pay, account: $('g-account')?.value || '',
+        guestName: $('g-name').value, contact: $('g-contact').value, note: $('g-note').value,
+      }),
+    })).json();
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Send order to the bar';
+    return alert("Couldn't reach the bar. Check your connection and try again.");
+  }
+  btn.disabled = false; btn.textContent = 'Send order to the bar';
+  if (!r.ok) return alert(r.error || 'That order didn\'t go through.');
+  ticket = r.order;
+  sessionStorage.setItem('mal_ticket', JSON.stringify({id: r.order.id, token: r.token}));
+  cart = []; updateBar();
+  renderTicket();
+  showScreen('ticket');
+  startPolling(r.order.id, r.token);
+}
+
+const STEPS = [['new','Sent'],['preparing','Making it'],['ready','On the way'],['served','Delivered']];
+function renderTicket() {
+  const o = ticket, idx = STEPS.findIndex(s => s[0] === (o.kitchen || 'new'));
+  const done = o.kitchen === 'served';
+  $('ticket-body').innerHTML = `
+    <div class="tick">
+      <div class="em">${done ? '🍹' : '✅'}</div>
+      <h2>${done ? 'Enjoy!' : 'Order sent'}</h2>
+      <div class="sub">${done ? 'Delivered to' : 'Bringing it to'} <strong>chair ${esc(o.seatLabel)}</strong></div>
+      <div class="num">#${o.num}</div>
+      <div class="steps">
+        ${STEPS.map((s, i) => `<div class="step ${i <= idx ? 'on' : ''}"><div class="dot"></div><div class="t">${s[1]}</div></div>`).join('')}
+      </div>
+      <div class="sub" style="margin-top:10px">
+        ${o.status === 'paid'
+          ? '✔️ Paid — thanks!'
+          : o.payment === 'account'
+            ? 'Charged to your member account.'
+            : 'Your server will take payment at your chair.'}
+      </div>
+      <div class="rcpt">
+        ${o.items.map(li => `<div><span>${li.qty}× ${esc(li.name)}</span><span>${money(li.total)}</span></div>`).join('')}
+        <div style="color:var(--muted)"><span>Tax</span><span>${money(o.tax)}</span></div>
+        <div style="font-weight:800;font-size:.95rem"><span>Total</span><span>${money(o.total)}</span></div>
+      </div>
+      <div class="send-row">
+        <a href="${smsHref(o)}">💬 Text me this</a>
+        <a href="${mailHref(o)}">✉️ Email it</a>
+      </div>
+    </div>`;
+}
+
+/* Receipts go out through the phone's own Messages / Mail app, so there's no
+   mail server to run and nothing of the guest's is stored to send it later. */
+function receiptText(o) {
+  const lines = o.items.map(li => `${li.qty} x ${li.name}  ${money(li.total)}`).join('\n');
+  return [
+    `${DATA.pool.name} — receipt`,
+    `Order #${o.num} · chair ${o.seatLabel}`,
+    o.created,
+    '',
+    lines,
+    `Tax  ${money(o.tax)}`,
+    `Total  ${money(o.total)}`,
+    '',
+    o.status === 'paid' ? 'Paid — thank you!'
+      : o.payment === 'account' ? 'Charged to your member account.'
+      : 'Payable to your server at the chair.',
+  ].join('\n');
+}
+function smsHref(o) {
+  const to = ($('g-contact')?.value || '').trim();
+  const num = /^[\d\s()+-]{7,}$/.test(to) ? to.replace(/[^\d+]/g, '') : '';
+  // iOS wants &body=, Android wants ?body= — the separator below works on both.
+  return `sms:${num}${/iPhone|iPad|Mac/.test(navigator.userAgent) ? '&' : '?'}body=${encodeURIComponent(receiptText(o))}`;
+}
+function mailHref(o) {
+  const to = ($('g-contact')?.value || '').trim();
+  const addr = to.includes('@') ? to : '';
+  return `mailto:${addr}?subject=${encodeURIComponent(`Receipt — order #${o.num}`)}&body=${encodeURIComponent(receiptText(o))}`;
+}
+
+/* Track the ticket so the guest can watch it move without asking anyone. */
+function startPolling(id, token) {
+  clearInterval(poll);
+  poll = setInterval(async () => {
+    try {
+      const r = await (await fetch(`/api/guest/ticket?id=${id}&token=${encodeURIComponent(token)}`)).json();
+      if (r.ok) {
+        ticket = r.order;
+        if ($('s-ticket').classList.contains('active')) renderTicket();
+        if (r.order.kitchen === 'served' && r.order.status === 'paid') clearInterval(poll);
+      }
+    } catch (e) { /* a dropped bar of signal shouldn't kill the page */ }
+  }, 8000);
+}
+
+function startOver() {
+  clearInterval(poll);
+  ticket = null; cart = []; pay = 'deliver';
+  updateBar(); renderItems();
+  showScreen('menu');
+}
+
+/* Coming back to a still-live ticket (locked phone, closed tab) reopens it. */
+(function resume() {
+  const saved = sessionStorage.getItem('mal_ticket');
+  if (!saved) return;
+  try {
+    const {id, token} = JSON.parse(saved);
+    fetch(`/api/guest/ticket?id=${id}&token=${encodeURIComponent(token)}`)
+      .then(r => r.json())
+      .then(r => {
+        if (!r.ok || !DATA) return;
+        ticket = r.order;
+        renderTicket(); showScreen('ticket'); startPolling(id, token);
+      }).catch(() => {});
+  } catch (e) {}
+})();
+
+boot();
+</script>
+</body>
+</html>

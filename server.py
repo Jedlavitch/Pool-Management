@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import json, os, socket, threading, hashlib, hmac, base64, secrets, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 from datetime import datetime
 
 # Serializes writes so concurrent requests can't corrupt or lose each other's
@@ -122,7 +122,12 @@ MANAGEMENT_ROLES = ('Pool Owner', 'Owner', 'Manager', 'Staffer')
 
 # Reachable without a session: the sign-in screen needs the name list, and the
 # login call itself obviously can't require being logged in.
-PUBLIC_API = ('/api/roster', '/api/auth', '/api/logout')
+PUBLIC_API = ('/api/roster', '/api/auth', '/api/logout',
+              # Guests ordering from a lounger have no staff login and never will.
+              # These four are the entire surface they can reach, and each one
+              # hands back only what a person holding a chair's QR code should
+              # see — never /api/data, which is the whole club at once.
+              '/api/guest/menu', '/api/guest/order', '/api/guest/ticket')
 
 # Routes that change who can get in, or expose the whole club at once.
 MANAGEMENT_API = (
@@ -238,6 +243,35 @@ def overlaps(a_start, a_end, b_start, b_end):
     if b2 is None:
         b2 = 24 * 60
     return a1 < b2 and b1 < a2
+
+def money_str(cents):
+    return '${:,.2f}'.format((cents or 0) / 100.0)
+
+def _int_or_none(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+def _label_key(label):
+    """Sort chair labels the way people read them: A2 before A10."""
+    head = ''.join(c for c in label if c.isalpha())
+    tail = ''.join(c for c in label if c.isdigit())
+    return (head, int(tail) if tail else 0)
+
+def _guest_view(o):
+    """The slice of an order its own guest may see — no staff names, no
+    takings, no other tickets."""
+    return {
+        'id': o['id'], 'num': o.get('num'), 'status': o.get('status'),
+        'kitchen': o.get('kitchen'), 'seatLabel': o.get('seatLabel', ''),
+        'guestName': o.get('guestName', ''),
+        'items': [{'name': li['name'], 'qty': li['qty'], 'price': li['price'], 'total': li['total'],
+                   'note': li.get('note', '')} for li in o.get('items', [])],
+        'subtotal': o.get('subtotal', 0), 'tax': o.get('tax', 0), 'total': o.get('total', 0),
+        'payment': o.get('payment'), 'created': o.get('created', ''),
+        'paidAt': o.get('paidAt'),
+    }
 
 def blank_layout(pool_id):
     """An empty deck for a pool. Coordinates live in this 1000x700 design space and
@@ -455,13 +489,56 @@ class Handler(BaseHTTPRequestHandler):
             })
             return
 
+        if p == '/api/guest/menu':
+            # Everything a phone at chair A7 needs to draw a menu, and nothing
+            # else: no staff, no sales, no other guests' orders.
+            q = parse_qs(urlparse(self.path).query)
+            pool_id = _int_or_none((q.get('pool') or [None])[0])
+            d = load_data()
+            pool = next((x for x in d.get('pools', []) if x['id'] == pool_id), None)
+            if not pool:
+                self.send_json({'ok': False, 'error': 'Unknown pool'}, 404); return
+            layout = next((l for l in d.get('layouts', []) if l.get('poolId') == pool_id), None)
+            seats = [{'id': s['id'], 'label': s.get('label', '')}
+                     for s in ((layout or {}).get('seats') or [])
+                     if (s.get('bookable') if s.get('bookable') is not None else s.get('type') in BOOKABLE_TYPES)
+                     and s.get('label')]
+            self.send_json({
+                'ok': True,
+                'pool': {'id': pool['id'], 'name': pool.get('name', ''),
+                         'status': pool.get('status', 'open'), 'tax_rate': pool.get('tax_rate', 0)},
+                'seats': sorted(seats, key=lambda s: _label_key(s['label'])),
+                'menu': [{'id': m['id'], 'name': m['name'], 'price': m['price'],
+                          'category': m.get('category', 'General'), 'emoji': m.get('emoji', ''),
+                          'desc': m.get('desc', ''), 'taxable': m.get('taxable', True)}
+                         for m in d.get('menu', [])
+                         if m.get('poolId') == pool_id and m.get('active') is not False],
+            })
+            return
+
+        if p == '/api/guest/ticket':
+            # Order tracking. The id alone isn't enough — ids are guessable
+            # timestamps, so the ticket only opens for the token we handed the
+            # phone that placed it.
+            q = parse_qs(urlparse(self.path).query)
+            oid = _int_or_none((q.get('id') or [None])[0])
+            token = (q.get('token') or [''])[0]
+            d = load_data()
+            o = next((x for x in d.get('orders', []) if x['id'] == oid), None)
+            if not o or not token or not hmac.compare_digest(token, o.get('guestToken') or ''):
+                self.send_json({'ok': False, 'error': 'Ticket not found'}, 404); return
+            self.send_json({'ok': True, 'order': _guest_view(o)})
+            return
+
         if p == '/api/me':
             u = self.current_user()
             self.send_json({'ok': True, 'id': u.get('id'), 'name': u.get('name', ''),
                             'role': u.get('role', '')})
             return
 
-        if p in ('/', '/index.html', '/maralavitchmanagement'):
+        if p in ('/order', '/guest', '/guest.html', '/drinks'):
+            serve_file(self, 'guest.html')
+        elif p in ('/', '/index.html', '/maralavitchmanagement'):
             serve_file(self, 'pool-manager.html')
         elif p in ('/quicklog', '/quicklog.html'):
             # Redirect to merged staff portal
@@ -474,6 +551,8 @@ class Handler(BaseHTTPRequestHandler):
             serve_file(self, 'kds.html')
         elif p in ('/print-qr', '/print-qr.html'):
             serve_file(self, 'print-qr.html')
+        elif p in ('/chair-qr', '/chair-qr.html'):
+            serve_file(self, 'chair-qr.html')
         elif p == '/manifest.json':
             serve_file(self, 'manifest.json', 'application/manifest+json')
         elif p == '/sw.js':
@@ -490,7 +569,6 @@ class Handler(BaseHTTPRequestHandler):
         elif p == '/api/orders':
             # Lightweight feed for the kitchen display and the waiters' status card.
             # Both poll it every few seconds, so it stays far smaller than /api/data.
-            from urllib.parse import parse_qs
             q = parse_qs(urlparse(self.path).query)
             pid = q.get('poolId', [None])[0]
             d = load_data()
@@ -1308,6 +1386,93 @@ class Handler(BaseHTTPRequestHandler):
             data.setdefault('orders', []).insert(0, order)
             save_data(data)
             self.send_json({'ok': True, 'order': order})
+
+        elif p == '/api/guest/order':
+            # A guest ordering from their lounger. Lands as an unpaid open tab
+            # plus a kitchen ticket, exactly like one a waiter rang in — the
+            # runner takes payment at the chair and closes it out in the POS.
+            pool_id = _int_or_none(body.get('poolId'))
+            pool = next((x for x in data.get('pools', []) if x['id'] == pool_id), None)
+            if not pool:
+                self.send_json({'ok': False, 'error': 'Unknown pool'}, 404); return
+            if pool.get('status') == 'closed':
+                self.send_json({'ok': False, 'error': 'The pool is closed right now — no orders please.'}, 409); return
+
+            layout = next((l for l in data.get('layouts', []) if l.get('poolId') == pool_id), None)
+            seat = next((s for s in ((layout or {}).get('seats') or [])
+                         if str(s['id']) == str(body.get('seatId'))), None)
+            if not seat:
+                self.send_json({'ok': False, 'error': 'Pick which chair you\'re at so we know where to bring it.'}, 400); return
+
+            # Prices come from the menu, never from the phone — the guest's
+            # device is the last thing that should be setting what a drink costs.
+            menu_by_id = {m['id']: m for m in data.get('menu', [])
+                          if m.get('poolId') == pool_id and m.get('active') is not False}
+            lines, subtotal, taxable_base = [], 0, 0
+            for li in body.get('items', [])[:40]:
+                src = menu_by_id.get(li.get('menuId'))
+                if not src:
+                    continue                      # off-menu or hidden: silently dropped
+                qty = max(1, min(20, int(li.get('qty') or 1)))
+                line_total = src['price'] * qty
+                subtotal += line_total
+                if src.get('taxable', True):
+                    taxable_base += line_total
+                lines.append({'menuId': src['id'], 'name': src['name'], 'price': src['price'],
+                              'qty': qty, 'note': (li.get('note') or '').strip()[:120],
+                              'total': line_total})
+            if not lines:
+                self.send_json({'ok': False, 'error': 'Your order is empty.'}, 400); return
+
+            tax = int(round(taxable_base * float(pool.get('tax_rate') or 0) / 100.0))
+            method = body.get('payment') if body.get('payment') in ('deliver', 'account') else 'deliver'
+            account = (body.get('account') or '').strip()[:60]
+            if method == 'account' and not account:
+                self.send_json({'ok': False, 'error': 'Enter your member account to charge it there.'}, 400); return
+
+            order = {
+                'id': ts(),
+                'poolId': pool_id,
+                'seatId': seat['id'], 'seatLabel': seat.get('label', ''),
+                'guestName': (body.get('guestName') or '').strip()[:60] or 'Chair ' + seat.get('label', ''),
+                'items': lines,
+                'subtotal': subtotal, 'taxRate': float(pool.get('tax_rate') or 0),
+                'tax': tax, 'tip': 0, 'total': subtotal + tax,
+                # Unpaid until the runner settles it — a phone can't take money.
+                'payment': 'account' if method == 'account' else '',
+                'account': account if method == 'account' else '',
+                'compReason': '', 'cashTendered': 0, 'changeDue': 0,
+                'settled': False,
+                'status': 'open',
+                'empId': '', 'empName': 'Guest order',
+                'created': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'paidAt': None,
+                'num': next_ticket_num(data, pool_id),
+                'kitchen': 'new',
+                'createdTs': int(datetime.now().timestamp() * 1000),
+                'startedTs': None, 'readyTs': None, 'servedTs': None,
+                'kitchenNote': (body.get('note') or '').strip()[:200],
+                # Marks it on the kitchen screen and lets the guest re-open
+                # their own ticket without being able to read anyone else's.
+                'source': 'guest',
+                'guestToken': secrets.token_urlsafe(16),
+                'guestContact': (body.get('contact') or '').strip()[:120],
+            }
+            data.setdefault('orders', []).insert(0, order)
+
+            # Tell the floor a chair just ordered — nobody is watching the pass.
+            for e in data.get('employees', []):
+                if pool_id in (e.get('poolIds') or []) and e.get('role') in MANAGEMENT_ROLES + ('Cashier', 'Head Guard'):
+                    data.setdefault('notifications', []).insert(0, {
+                        'id': ts() + len(data.get('notifications', [])) + 1,
+                        'empId': str(e['id']), 'poolId': pool_id,
+                        'title': f"📱 Chair {order['seatLabel']} ordered",
+                        'message': ', '.join(f"{li['qty']}× {li['name']}" for li in lines) + f" · {money_str(order['total'])}",
+                        'read': False, 'ts': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                    })
+            save_data(data)
+            self.send_json({'ok': True, 'order': _guest_view(order), 'token': order['guestToken']})
 
         elif p == '/api/order/pay':
             # Close out a tab that was left open

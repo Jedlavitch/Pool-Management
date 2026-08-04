@@ -2978,6 +2978,9 @@ async function saveMenuItem(id) {
     emoji: v('mi-emoji'), desc: v('mi-desc'), taxable: c('mi-taxable'), active: c('mi-active'),
   };
   if (!body.name.trim()) return alert('Give the item a name.');
+  // Blank price → $0.00 → free drinks. Make that a deliberate choice.
+  if (PD.parseMoney(body.price) === 0 &&
+      !confirm(`"${body.name}" has no price, so it will ring up as $0.00.\n\nSave it as a free item anyway?`)) return;
   const res = id ? await post('/api/menu/update', { id, ...body })
                  : await post('/api/menu', { poolId: Number(activePoolId), ...body });
   if (!res.ok) return alert(res.error || 'Could not save.');
