@@ -782,11 +782,23 @@
   </div>
 
   <div class="card">
-    <h2>Kitchen Display</h2>
-    <p style="font-size:.85rem;color:var(--muted);margin-bottom:8px">
-      Open this on the tablet or TV in the snack bar. Orders your waiters ring up appear
-      there within seconds, and the cook's status shows up on the waiters' phones.</p>
-    <div class="qr-url" id="kds-url">Loading…</div>
+    <h2>Kitchen Display Screens</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+      A screen in the snack bar gets its own key instead of a staff login, so it keeps
+      showing tickets for good and nobody has to sign in on a wall-mounted tablet.
+      Open a screen's link once on that device — the key saves itself there.</p>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>Name this screen</label>
+        <input type="text" id="kds-label" placeholder="e.g. Snack bar tablet" />
+      </div>
+      <div class="form-group" style="flex:0"><label>&nbsp;</label>
+        <button class="btn btn-primary" onclick="addKdsDevice()">➕ Add screen</button></div>
+    </div>
+    <div id="kds-devices"></div>
+    <p class="range-hint" style="margin-top:10px">
+      Lost a tablet? <strong>Rotate</strong> issues a new key and kills the old one instantly.
+    </p>
   </div>
 
   <div class="card">
@@ -2184,8 +2196,62 @@ async function saveSquareAppId() {
   renderSquareSetup();
 }
 
+/* ── Kitchen screens ──────────────────────────────────────────────────── */
+async function addKdsDevice() {
+  const label = document.getElementById('kds-label').value.trim();
+  const res = await api.post('/api/kds-token', { label: label || 'Kitchen screen', poolId: Number(activePoolId) });
+  if (!res.ok) return alert(res.error || 'Could not add that screen.');
+  document.getElementById('kds-label').value = '';
+  await refresh();
+  renderKdsDevices();
+}
+async function rotateKdsDevice(id, label) {
+  if (!confirm(`Rotate the key for "${label}"?\n\nThat screen goes dark until you open its new link on it. Any other device using the old key stops working immediately.`)) return;
+  const res = await api.post('/api/kds-token', { id, label, poolId: Number(activePoolId) });
+  if (!res.ok) return alert(res.error || 'Could not rotate that key.');
+  await refresh();
+  renderKdsDevices();
+}
+async function revokeKdsDevice(id, label) {
+  if (!confirm(`Remove "${label}"?\n\nThat screen stops receiving tickets straight away.`)) return;
+  await api.post('/api/kds-token/revoke', { id });
+  await refresh();
+  renderKdsDevices();
+}
+function kdsLink(d) { return `${location.origin}/kds?device=${encodeURIComponent(d.token)}`; }
+function copyKdsLink(id) {
+  const d = (DB.kds_devices || []).find(x => x.id === id);
+  if (!d) return;
+  navigator.clipboard.writeText(kdsLink(d))
+    .then(() => alert('Link copied. Open it once on the kitchen tablet.'))
+    .catch(() => prompt('Copy this link and open it on the kitchen tablet:', kdsLink(d)));
+}
+function renderKdsDevices() {
+  const el = document.getElementById('kds-devices');
+  if (!el) return;
+  const list = (DB.kds_devices || []).filter(d => Number(d.poolId) === Number(activePoolId));
+  el.innerHTML = list.length ? `<table>
+    <thead><tr><th>Screen</th><th>Link to open on that device</th><th>Last seen</th><th></th></tr></thead>
+    <tbody>${list.map(d => `
+      <tr>
+        <td><strong>${PD.esc(d.label)}</strong></td>
+        <td><div class="qr-url" style="margin:0;font-size:.7rem">${PD.esc(kdsLink(d))}</div></td>
+        <td style="white-space:nowrap">${d.lastSeen
+          ? PD.esc(d.lastSeen)
+          : '<span class="badge badge-warn">never</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-primary" onclick="copyKdsLink(${d.id})">Copy</button>
+          <button class="btn btn-sm" style="background:#f3f4f6" onclick="rotateKdsDevice(${d.id},'${PD.esc(d.label).replace(/'/g, "\\'")}')">Rotate</button>
+          <button class="btn btn-danger" onclick="revokeKdsDevice(${d.id},'${PD.esc(d.label).replace(/'/g, "\\'")}')">Remove</button>
+        </td>
+      </tr>`).join('')}</tbody></table>`
+    : `<p class="empty">No screens paired yet. Add one above, then open its link on the kitchen tablet —
+       until you do, the kitchen display shows nothing at all.</p>`;
+}
+
 async function renderKitchen() {
-  document.getElementById('kds-url').textContent = `${location.origin}/kds`;
+  await refresh();          // both the screen list and the Square id live in DB
+  renderKdsDevices();
   renderSquareSetup();
   let orders = [];
   try {

@@ -138,7 +138,16 @@ MANAGEMENT_API = (
     '/api/shifts/bulk', '/api/menu', '/api/menu/update', '/api/menu/delete',
     '/api/menu/bulk', '/api/layout', '/api/notification/send',
     '/api/order/void', '/api/order/delete', '/api/order/settle',
+    '/api/kds-token', '/api/kds-token/revoke',
 )
+
+# ── Kitchen display devices ────────────────────────────────────────────────
+# A KDS is a tablet bolted to a wall in a hot kitchen. Nobody signs into it, and
+# a 7-day staff session dying mid-service means the board silently goes blank —
+# which is exactly how you lose a Saturday lunch. So a screen gets its own
+# long-lived token instead, scoped to two calls: read today's tickets, and bump
+# one along. It cannot read the club, take money, or void a ticket.
+KITCHEN_API = ('/api/orders', '/api/order/kitchen')
 
 
 def get_mdns_host():
@@ -182,11 +191,12 @@ def get_local_ip():
 
 def default_data():
     return {'employees': [], 'chemicals': [], 'shifts': [], 'punches': [], 'announcements': [], 'resources': [], 'pool_status': 'open', 'shift_requests': [], 'notifications': [], 'shift_confirmations': {}, 'pools': [], 'breaks': [],
-            'menu': [], 'layouts': [], 'reservations': [], 'orders': [], 'waitlist': []}
+            'menu': [], 'layouts': [], 'reservations': [], 'orders': [], 'waitlist': [],
+            'kds_devices': []}
 
 # Entities that belong to a single pool and carry a poolId
 POOL_SCOPED = ('shifts', 'chemicals', 'punches', 'announcements', 'resources', 'shift_requests', 'notifications', 'breaks',
-               'menu', 'layouts', 'reservations', 'orders', 'waitlist')
+               'menu', 'layouts', 'reservations', 'orders', 'waitlist', 'kds_devices')
 
 # Deck items guests can actually be seated at — everything else is decor
 BOOKABLE_TYPES = ('lounger', 'chair', 'cabana', 'table', 'daybed')
@@ -390,6 +400,31 @@ class Handler(BaseHTTPRequestHandler):
             return auth[7:].strip()
         return None
 
+    def device_token(self):
+        """A kitchen screen's key, from the header it normally sends or the
+        query string it was first opened with."""
+        hdr = self.headers.get('X-Device-Token')
+        if hdr:
+            return hdr.strip()
+        q = parse_qs(urlparse(self.path).query)
+        return (q.get('device') or [None])[0]
+
+    def kitchen_device(self):
+        """The registered screen this request is coming from, or None. Also
+        stamps last-seen so a manager can tell which screens are still alive."""
+        tok = self.device_token()
+        if not tok:
+            return None
+        data = load_data()
+        for d in data.get('kds_devices', []):
+            if hmac.compare_digest(tok, d.get('token', '')):
+                today = datetime.now().strftime('%Y-%m-%d %H:%M')
+                if d.get('lastSeen') != today:
+                    d['lastSeen'] = today
+                    save_data(data)
+                return d
+        return None
+
     def current_user(self):
         """The signed-in employee, or None. Cached per request."""
         if hasattr(self, '_user_cache'):
@@ -440,6 +475,9 @@ class Handler(BaseHTTPRequestHandler):
             return True
         user = self.current_user()
         if not user:
+            # A kitchen screen carries no session, only its own scoped key.
+            if path in KITCHEN_API and self.kitchen_device():
+                return True
             self.send_json({'ok': False, 'error': 'Sign in required'}, 401)
             return False
         if path in MANAGEMENT_API and user.get('role') not in MANAGEMENT_ROLES:
@@ -573,6 +611,13 @@ class Handler(BaseHTTPRequestHandler):
             pid = q.get('poolId', [None])[0]
             d = load_data()
             rows = d.get('orders', [])
+            pools = d.get('pools', [])
+            # A screen is bolted to one kitchen: it sees that pool's tickets and
+            # can't widen its own view by asking for another pool or 'all'.
+            dev = None if self.current_user() else self.kitchen_device()
+            if dev and dev.get('poolId') is not None:
+                pid = dev['poolId']
+                pools = [x for x in pools if x['id'] == dev['poolId']]
             if pid not in (None, '', 'all'):
                 rows = [o for o in rows if str(o.get('poolId')) == str(pid)]
             today_str = datetime.now().strftime('%Y-%m-%d')
@@ -580,11 +625,16 @@ class Handler(BaseHTTPRequestHandler):
             rows = [o for o in rows
                     if o.get('date') == today_str
                     or (o.get('status') != 'void' and o.get('kitchen') in ('new', 'preparing', 'ready'))]
+            # A guest's ticket token would let its holder re-open that guest's
+            # order; a cook has no use for it, so it never leaves the server.
+            rows = [{k: v for k, v in o.items() if k not in ('guestToken', 'guestContact')}
+                    for o in rows]
             self.send_json({
                 'orders': sorted(rows, key=lambda o: o.get('createdTs') or 0),
                 'pools': [{'id': x['id'], 'name': x.get('name', ''), 'status': x.get('status', 'open')}
-                          for x in d.get('pools', [])],
+                          for x in pools],
                 'now': int(datetime.now().timestamp() * 1000),
+                'device': {'label': dev['label']} if dev else None,
             })
         elif p == '/api/ip':
             self.send_json({'ip': get_local_ip(), 'host': get_mdns_host(), 'port': PORT, 'base_url': get_base_url()})
@@ -1473,6 +1523,35 @@ class Handler(BaseHTTPRequestHandler):
                     })
             save_data(data)
             self.send_json({'ok': True, 'order': _guest_view(order), 'token': order['guestToken']})
+
+        elif p == '/api/kds-token':
+            # Register a kitchen screen. Rotating one revokes the old key, so a
+            # tablet that walks off the property stops working the moment a
+            # manager presses the button.
+            label = (body.get('label') or 'Kitchen screen').strip()[:40]
+            pool_id = _int_or_none(body.get('poolId'))
+            devices = data.setdefault('kds_devices', [])
+            dev = next((d for d in devices if d.get('id') == body.get('id')), None)
+            if dev:
+                dev['token'] = secrets.token_urlsafe(24)   # rotate in place
+                dev['label'] = label
+                dev['rotated'] = datetime.now().strftime('%Y-%m-%d %H:%M')
+            else:
+                dev = {
+                    'id': ts(), 'label': label, 'poolId': pool_id,
+                    'token': secrets.token_urlsafe(24),
+                    'created': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                    'lastSeen': None, 'rotated': None,
+                }
+                devices.append(dev)
+            save_data(data)
+            self.send_json({'ok': True, 'device': dev})
+
+        elif p == '/api/kds-token/revoke':
+            before = len(data.get('kds_devices', []))
+            data['kds_devices'] = [d for d in data.get('kds_devices', []) if d.get('id') != body.get('id')]
+            save_data(data)
+            self.send_json({'ok': True, 'removed': before - len(data['kds_devices'])})
 
         elif p == '/api/order/pay':
             # Close out a tab that was left open
