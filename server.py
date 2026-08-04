@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import json, os, socket, threading, hashlib, hmac, base64, secrets, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 from datetime import datetime
 
 # Serializes writes so concurrent requests can't corrupt or lose each other's
@@ -32,6 +32,25 @@ IS_PUBLIC = bool(PUBLIC_HOST)
 
 # Escape hatch for a fresh public deploy, where nobody has a password yet.
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')
+
+
+def nobody_can_sign_in(data):
+    """True when a public deploy has locked everyone out: employees exist, not
+    one of them has a password, and there's no ADMIN_PASSWORD to fall back on.
+    Sign-in then refuses every account with "a manager must set your password"
+    while the only manager is on the wrong side of the door."""
+    if not IS_PUBLIC or ADMIN_PASSWORD:
+        return False
+    emps = data.get('employees') or []
+    return bool(emps) and not any(e.get('password') for e in emps)
+
+
+def claim_code():
+    """A short code that only somebody who can read the deploy's log can see —
+    which on Railway (or anywhere else) means the person who owns it. Derived
+    from the signing key, so it survives a restart without being stored, and
+    dies the moment the first password is set."""
+    return hmac.new(SECRET, b'account-claim', hashlib.sha256).hexdigest()[:10].upper()
 
 
 def _load_secret():
@@ -122,7 +141,12 @@ MANAGEMENT_ROLES = ('Pool Owner', 'Owner', 'Manager', 'Staffer')
 
 # Reachable without a session: the sign-in screen needs the name list, and the
 # login call itself obviously can't require being logged in.
-PUBLIC_API = ('/api/roster', '/api/auth', '/api/logout')
+PUBLIC_API = ('/api/roster', '/api/auth', '/api/logout',
+              # Guests ordering from a lounger have no staff login and never will.
+              # These four are the entire surface they can reach, and each one
+              # hands back only what a person holding a chair's QR code should
+              # see — never /api/data, which is the whole club at once.
+              '/api/guest/menu', '/api/guest/order', '/api/guest/ticket')
 
 # Routes that change who can get in, or expose the whole club at once.
 MANAGEMENT_API = (
@@ -133,7 +157,16 @@ MANAGEMENT_API = (
     '/api/shifts/bulk', '/api/menu', '/api/menu/update', '/api/menu/delete',
     '/api/menu/bulk', '/api/layout', '/api/notification/send',
     '/api/order/void', '/api/order/delete', '/api/order/settle',
+    '/api/kds-token', '/api/kds-token/revoke',
 )
+
+# ── Kitchen display devices ────────────────────────────────────────────────
+# A KDS is a tablet bolted to a wall in a hot kitchen. Nobody signs into it, and
+# a 7-day staff session dying mid-service means the board silently goes blank —
+# which is exactly how you lose a Saturday lunch. So a screen gets its own
+# long-lived token instead, scoped to two calls: read today's tickets, and bump
+# one along. It cannot read the club, take money, or void a ticket.
+KITCHEN_API = ('/api/orders', '/api/order/kitchen')
 
 
 def get_mdns_host():
@@ -177,11 +210,12 @@ def get_local_ip():
 
 def default_data():
     return {'employees': [], 'chemicals': [], 'shifts': [], 'punches': [], 'announcements': [], 'resources': [], 'pool_status': 'open', 'shift_requests': [], 'notifications': [], 'shift_confirmations': {}, 'pools': [], 'breaks': [],
-            'menu': [], 'layouts': [], 'reservations': [], 'orders': [], 'waitlist': []}
+            'menu': [], 'layouts': [], 'reservations': [], 'orders': [], 'waitlist': [],
+            'kds_devices': []}
 
 # Entities that belong to a single pool and carry a poolId
 POOL_SCOPED = ('shifts', 'chemicals', 'punches', 'announcements', 'resources', 'shift_requests', 'notifications', 'breaks',
-               'menu', 'layouts', 'reservations', 'orders', 'waitlist')
+               'menu', 'layouts', 'reservations', 'orders', 'waitlist', 'kds_devices')
 
 # Deck items guests can actually be seated at — everything else is decor
 BOOKABLE_TYPES = ('lounger', 'chair', 'cabana', 'table', 'daybed')
@@ -238,6 +272,35 @@ def overlaps(a_start, a_end, b_start, b_end):
     if b2 is None:
         b2 = 24 * 60
     return a1 < b2 and b1 < a2
+
+def money_str(cents):
+    return '${:,.2f}'.format((cents or 0) / 100.0)
+
+def _int_or_none(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+def _label_key(label):
+    """Sort chair labels the way people read them: A2 before A10."""
+    head = ''.join(c for c in label if c.isalpha())
+    tail = ''.join(c for c in label if c.isdigit())
+    return (head, int(tail) if tail else 0)
+
+def _guest_view(o):
+    """The slice of an order its own guest may see — no staff names, no
+    takings, no other tickets."""
+    return {
+        'id': o['id'], 'num': o.get('num'), 'status': o.get('status'),
+        'kitchen': o.get('kitchen'), 'seatLabel': o.get('seatLabel', ''),
+        'guestName': o.get('guestName', ''),
+        'items': [{'name': li['name'], 'qty': li['qty'], 'price': li['price'], 'total': li['total'],
+                   'note': li.get('note', '')} for li in o.get('items', [])],
+        'subtotal': o.get('subtotal', 0), 'tax': o.get('tax', 0), 'total': o.get('total', 0),
+        'payment': o.get('payment'), 'created': o.get('created', ''),
+        'paidAt': o.get('paidAt'),
+    }
 
 def blank_layout(pool_id):
     """An empty deck for a pool. Coordinates live in this 1000x700 design space and
@@ -356,6 +419,31 @@ class Handler(BaseHTTPRequestHandler):
             return auth[7:].strip()
         return None
 
+    def device_token(self):
+        """A kitchen screen's key, from the header it normally sends or the
+        query string it was first opened with."""
+        hdr = self.headers.get('X-Device-Token')
+        if hdr:
+            return hdr.strip()
+        q = parse_qs(urlparse(self.path).query)
+        return (q.get('device') or [None])[0]
+
+    def kitchen_device(self):
+        """The registered screen this request is coming from, or None. Also
+        stamps last-seen so a manager can tell which screens are still alive."""
+        tok = self.device_token()
+        if not tok:
+            return None
+        data = load_data()
+        for d in data.get('kds_devices', []):
+            if hmac.compare_digest(tok, d.get('token', '')):
+                today = datetime.now().strftime('%Y-%m-%d %H:%M')
+                if d.get('lastSeen') != today:
+                    d['lastSeen'] = today
+                    save_data(data)
+                return d
+        return None
+
     def current_user(self):
         """The signed-in employee, or None. Cached per request."""
         if hasattr(self, '_user_cache'):
@@ -406,6 +494,9 @@ class Handler(BaseHTTPRequestHandler):
             return True
         user = self.current_user()
         if not user:
+            # A kitchen screen carries no session, only its own scoped key.
+            if path in KITCHEN_API and self.kitchen_device():
+                return True
             self.send_json({'ok': False, 'error': 'Sign in required'}, 401)
             return False
         if path in MANAGEMENT_API and user.get('role') not in MANAGEMENT_ROLES:
@@ -460,10 +551,55 @@ class Handler(BaseHTTPRequestHandler):
                               for e in d.get('employees', [])],
                 'signed_in': bool(self.current_user()),
                 'requires_password': IS_PUBLIC,
+                # Offering "Administrator" when no ADMIN_PASSWORD is configured
+                # just hands back "Employee not found" to someone already locked out.
+                'admin_available': bool(ADMIN_PASSWORD),
+                'needs_claim': nobody_can_sign_in(d),
                 # Nobody enrolled and no admin password configured: the club
                 # still has to be created, so the dashboard opens unlocked.
                 'setup_mode': not d.get('employees') and not ADMIN_PASSWORD,
             })
+            return
+
+        if p == '/api/guest/menu':
+            # Everything a phone at chair A7 needs to draw a menu, and nothing
+            # else: no staff, no sales, no other guests' orders.
+            q = parse_qs(urlparse(self.path).query)
+            pool_id = _int_or_none((q.get('pool') or [None])[0])
+            d = load_data()
+            pool = next((x for x in d.get('pools', []) if x['id'] == pool_id), None)
+            if not pool:
+                self.send_json({'ok': False, 'error': 'Unknown pool'}, 404); return
+            layout = next((l for l in d.get('layouts', []) if l.get('poolId') == pool_id), None)
+            seats = [{'id': s['id'], 'label': s.get('label', '')}
+                     for s in ((layout or {}).get('seats') or [])
+                     if (s.get('bookable') if s.get('bookable') is not None else s.get('type') in BOOKABLE_TYPES)
+                     and s.get('label')]
+            self.send_json({
+                'ok': True,
+                'pool': {'id': pool['id'], 'name': pool.get('name', ''),
+                         'status': pool.get('status', 'open'), 'tax_rate': pool.get('tax_rate', 0)},
+                'seats': sorted(seats, key=lambda s: _label_key(s['label'])),
+                'menu': [{'id': m['id'], 'name': m['name'], 'price': m['price'],
+                          'category': m.get('category', 'General'), 'emoji': m.get('emoji', ''),
+                          'desc': m.get('desc', ''), 'taxable': m.get('taxable', True)}
+                         for m in d.get('menu', [])
+                         if m.get('poolId') == pool_id and m.get('active') is not False],
+            })
+            return
+
+        if p == '/api/guest/ticket':
+            # Order tracking. The id alone isn't enough — ids are guessable
+            # timestamps, so the ticket only opens for the token we handed the
+            # phone that placed it.
+            q = parse_qs(urlparse(self.path).query)
+            oid = _int_or_none((q.get('id') or [None])[0])
+            token = (q.get('token') or [''])[0]
+            d = load_data()
+            o = next((x for x in d.get('orders', []) if x['id'] == oid), None)
+            if not o or not token or not hmac.compare_digest(token, o.get('guestToken') or ''):
+                self.send_json({'ok': False, 'error': 'Ticket not found'}, 404); return
+            self.send_json({'ok': True, 'order': _guest_view(o)})
             return
 
         if p == '/api/me':
@@ -472,7 +608,9 @@ class Handler(BaseHTTPRequestHandler):
                             'role': u.get('role', '')})
             return
 
-        if p in ('/', '/index.html', '/maralavitchmanagement'):
+        if p in ('/order', '/guest', '/guest.html', '/drinks'):
+            serve_file(self, 'guest.html')
+        elif p in ('/', '/index.html', '/maralavitchmanagement'):
             serve_file(self, 'pool-manager.html')
         elif p in ('/quicklog', '/quicklog.html'):
             # Redirect to merged staff portal
@@ -485,6 +623,12 @@ class Handler(BaseHTTPRequestHandler):
             serve_file(self, 'kds.html')
         elif p in ('/print-qr', '/print-qr.html'):
             serve_file(self, 'print-qr.html')
+        elif p in ('/chair-qr', '/chair-qr.html'):
+            serve_file(self, 'chair-qr.html')
+        elif p in ('/recover', '/recover.html', '/reset'):
+            # Deliberately reachable without signing in — it exists precisely for
+            # the case where a device won't let you sign in.
+            serve_file(self, 'recover.html')
         elif p == '/manifest.json':
             serve_file(self, 'manifest.json', 'application/manifest+json')
         elif p == '/sw.js':
@@ -501,11 +645,17 @@ class Handler(BaseHTTPRequestHandler):
         elif p == '/api/orders':
             # Lightweight feed for the kitchen display and the waiters' status card.
             # Both poll it every few seconds, so it stays far smaller than /api/data.
-            from urllib.parse import parse_qs
             q = parse_qs(urlparse(self.path).query)
             pid = q.get('poolId', [None])[0]
             d = load_data()
             rows = d.get('orders', [])
+            pools = d.get('pools', [])
+            # A screen is bolted to one kitchen: it sees that pool's tickets and
+            # can't widen its own view by asking for another pool or 'all'.
+            dev = None if self.current_user() else self.kitchen_device()
+            if dev and dev.get('poolId') is not None:
+                pid = dev['poolId']
+                pools = [x for x in pools if x['id'] == dev['poolId']]
             if pid not in (None, '', 'all'):
                 rows = [o for o in rows if str(o.get('poolId')) == str(pid)]
             today_str = datetime.now().strftime('%Y-%m-%d')
@@ -513,11 +663,16 @@ class Handler(BaseHTTPRequestHandler):
             rows = [o for o in rows
                     if o.get('date') == today_str
                     or (o.get('status') != 'void' and o.get('kitchen') in ('new', 'preparing', 'ready'))]
+            # A guest's ticket token would let its holder re-open that guest's
+            # order; a cook has no use for it, so it never leaves the server.
+            rows = [{k: v for k, v in o.items() if k not in ('guestToken', 'guestContact')}
+                    for o in rows]
             self.send_json({
                 'orders': sorted(rows, key=lambda o: o.get('createdTs') or 0),
                 'pools': [{'id': x['id'], 'name': x.get('name', ''), 'status': x.get('status', 'open')}
-                          for x in d.get('pools', [])],
+                          for x in pools],
                 'now': int(datetime.now().timestamp() * 1000),
+                'device': {'label': dev['label']} if dev else None,
             })
         elif p == '/api/ip':
             self.send_json({'ip': get_local_ip(), 'host': get_mdns_host(), 'port': PORT, 'base_url': get_base_url()})
@@ -685,11 +840,34 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({'ok': False, 'error': 'Employee not found'}, 404)
                 return
 
+            # Locked-out deploy: let the owner claim an account with the code
+            # printed in the server log. Only available while nobody at all has
+            # a password, so it shuts itself the instant the first one is set.
+            if body.get('claim') and nobody_can_sign_in(data):
+                if hmac.compare_digest(str(body.get('claim')).strip().upper(), claim_code()):
+                    if not password:
+                        self.send_json({'ok': False, 'error': 'Choose a password.'}, 400); return
+                    emp['password'] = hash_password(password)
+                    save_data(data)
+                    self.send_json({'ok': True, 'role': emp.get('role', ''), 'name': emp.get('name', ''),
+                                    'claimed': True}, session=str(emp['id']))
+                else:
+                    self.send_json({'ok': False, 'error': 'That code does not match the one in the server log.'}, 401)
+                return
+
             stored = emp.get('password')
             if not stored:
                 # On the LAN this is the long-standing convenience: pick your
                 # name and you're in. Once the app is on the public internet a
                 # blank password is not a credential, so it's refused there.
+                if IS_PUBLIC and nobody_can_sign_in(data):
+                    # Nobody can let anyone in, so point at the way out rather
+                    # than repeating advice that cannot be followed.
+                    self.send_json({'ok': False, 'needs_claim': True, 'error':
+                        'Nobody on this club has a password yet, so there is no manager who can set one. '
+                        'Open your hosting dashboard\'s log — the server prints a one-time claim code at '
+                        'startup — then enter it here to set your own password.'}, 403)
+                    return
                 if IS_PUBLIC:
                     self.send_json({'ok': False, 'needs_password': True,
                                     'error': 'A manager must set your password before you can sign in.'}, 403)
@@ -1331,6 +1509,122 @@ class Handler(BaseHTTPRequestHandler):
             save_data(data)
             self.send_json({'ok': True, 'order': order})
 
+        elif p == '/api/guest/order':
+            # A guest ordering from their lounger. Lands as an unpaid open tab
+            # plus a kitchen ticket, exactly like one a waiter rang in — the
+            # runner takes payment at the chair and closes it out in the POS.
+            pool_id = _int_or_none(body.get('poolId'))
+            pool = next((x for x in data.get('pools', []) if x['id'] == pool_id), None)
+            if not pool:
+                self.send_json({'ok': False, 'error': 'Unknown pool'}, 404); return
+            if pool.get('status') == 'closed':
+                self.send_json({'ok': False, 'error': 'The pool is closed right now — no orders please.'}, 409); return
+
+            layout = next((l for l in data.get('layouts', []) if l.get('poolId') == pool_id), None)
+            seat = next((s for s in ((layout or {}).get('seats') or [])
+                         if str(s['id']) == str(body.get('seatId'))), None)
+            if not seat:
+                self.send_json({'ok': False, 'error': 'Pick which chair you\'re at so we know where to bring it.'}, 400); return
+
+            # Prices come from the menu, never from the phone — the guest's
+            # device is the last thing that should be setting what a drink costs.
+            menu_by_id = {m['id']: m for m in data.get('menu', [])
+                          if m.get('poolId') == pool_id and m.get('active') is not False}
+            lines, subtotal, taxable_base = [], 0, 0
+            for li in body.get('items', [])[:40]:
+                src = menu_by_id.get(li.get('menuId'))
+                if not src:
+                    continue                      # off-menu or hidden: silently dropped
+                qty = max(1, min(20, int(li.get('qty') or 1)))
+                line_total = src['price'] * qty
+                subtotal += line_total
+                if src.get('taxable', True):
+                    taxable_base += line_total
+                lines.append({'menuId': src['id'], 'name': src['name'], 'price': src['price'],
+                              'qty': qty, 'note': (li.get('note') or '').strip()[:120],
+                              'total': line_total})
+            if not lines:
+                self.send_json({'ok': False, 'error': 'Your order is empty.'}, 400); return
+
+            tax = int(round(taxable_base * float(pool.get('tax_rate') or 0) / 100.0))
+            method = body.get('payment') if body.get('payment') in ('deliver', 'account') else 'deliver'
+            account = (body.get('account') or '').strip()[:60]
+            if method == 'account' and not account:
+                self.send_json({'ok': False, 'error': 'Enter your member account to charge it there.'}, 400); return
+
+            order = {
+                'id': ts(),
+                'poolId': pool_id,
+                'seatId': seat['id'], 'seatLabel': seat.get('label', ''),
+                'guestName': (body.get('guestName') or '').strip()[:60] or 'Chair ' + seat.get('label', ''),
+                'items': lines,
+                'subtotal': subtotal, 'taxRate': float(pool.get('tax_rate') or 0),
+                'tax': tax, 'tip': 0, 'total': subtotal + tax,
+                # Unpaid until the runner settles it — a phone can't take money.
+                'payment': 'account' if method == 'account' else '',
+                'account': account if method == 'account' else '',
+                'compReason': '', 'cashTendered': 0, 'changeDue': 0,
+                'settled': False,
+                'status': 'open',
+                'empId': '', 'empName': 'Guest order',
+                'created': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'paidAt': None,
+                'num': next_ticket_num(data, pool_id),
+                'kitchen': 'new',
+                'createdTs': int(datetime.now().timestamp() * 1000),
+                'startedTs': None, 'readyTs': None, 'servedTs': None,
+                'kitchenNote': (body.get('note') or '').strip()[:200],
+                # Marks it on the kitchen screen and lets the guest re-open
+                # their own ticket without being able to read anyone else's.
+                'source': 'guest',
+                'guestToken': secrets.token_urlsafe(16),
+                'guestContact': (body.get('contact') or '').strip()[:120],
+            }
+            data.setdefault('orders', []).insert(0, order)
+
+            # Tell the floor a chair just ordered — nobody is watching the pass.
+            for e in data.get('employees', []):
+                if pool_id in (e.get('poolIds') or []) and e.get('role') in MANAGEMENT_ROLES + ('Cashier', 'Head Guard'):
+                    data.setdefault('notifications', []).insert(0, {
+                        'id': ts() + len(data.get('notifications', [])) + 1,
+                        'empId': str(e['id']), 'poolId': pool_id,
+                        'title': f"📱 Chair {order['seatLabel']} ordered",
+                        'message': ', '.join(f"{li['qty']}× {li['name']}" for li in lines) + f" · {money_str(order['total'])}",
+                        'read': False, 'ts': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                    })
+            save_data(data)
+            self.send_json({'ok': True, 'order': _guest_view(order), 'token': order['guestToken']})
+
+        elif p == '/api/kds-token':
+            # Register a kitchen screen. Rotating one revokes the old key, so a
+            # tablet that walks off the property stops working the moment a
+            # manager presses the button.
+            label = (body.get('label') or 'Kitchen screen').strip()[:40]
+            pool_id = _int_or_none(body.get('poolId'))
+            devices = data.setdefault('kds_devices', [])
+            dev = next((d for d in devices if d.get('id') == body.get('id')), None)
+            if dev:
+                dev['token'] = secrets.token_urlsafe(24)   # rotate in place
+                dev['label'] = label
+                dev['rotated'] = datetime.now().strftime('%Y-%m-%d %H:%M')
+            else:
+                dev = {
+                    'id': ts(), 'label': label, 'poolId': pool_id,
+                    'token': secrets.token_urlsafe(24),
+                    'created': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                    'lastSeen': None, 'rotated': None,
+                }
+                devices.append(dev)
+            save_data(data)
+            self.send_json({'ok': True, 'device': dev})
+
+        elif p == '/api/kds-token/revoke':
+            before = len(data.get('kds_devices', []))
+            data['kds_devices'] = [d for d in data.get('kds_devices', []) if d.get('id') != body.get('id')]
+            save_data(data)
+            self.send_json({'ok': True, 'removed': before - len(data['kds_devices'])})
+
         elif p == '/api/order/pay':
             # Close out a tab that was left open
             order = next((o for o in data.get('orders', []) if o['id'] == body.get('id')), None)
@@ -1432,8 +1726,20 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     ip = get_local_ip()
-    print(f'Pool Manager → http://localhost:{PORT}')
+    print(f"Pool Manager → http://localhost:{PORT}", flush=True)
     print(f'Guard QR URL → http://{ip}:{PORT}/quicklog')
+    # Loud on purpose: if this prints, nobody can currently sign in, and this
+    # code is the only way back in short of an ADMIN_PASSWORD.
+    if nobody_can_sign_in(load_data()):
+        # flush=True because a hosting platform pipes stdout: without it this
+        # banner can sit in a buffer for ages, which is useless to someone
+        # standing outside their own locked club reading the log.
+        print('\n  ' + '=' * 58, flush=True)
+        print('  NOBODY ON THIS CLUB HAS A PASSWORD — sign-in is refusing everyone.', flush=True)
+        print('  Claim your account on the sign-in screen with this code:', flush=True)
+        print(f'\n        CLAIM CODE:  {claim_code()}\n', flush=True)
+        print('  It stops working the moment the first password is set.', flush=True)
+        print('  ' + '=' * 58 + '\n', flush=True)
     # Threaded server: handle many devices at once so the app never appears
     # "offline" just because another request is in flight.
     server = ThreadingHTTPServer(('0.0.0.0', PORT), Handler)

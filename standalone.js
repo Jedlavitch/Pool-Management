@@ -525,8 +525,19 @@ global.fetch = function (input, init) {
     activateStandalone('404 from ' + path);
     return serveLocally(path, method, init);
   }, err => {
-    activateStandalone(err && err.message ? err.message : 'request failed');
-    return serveLocally(path, method, init);
+    // A rejected request means "couldn't reach it", which is NOT the same as
+    // "no API lives here" — a restart, a sleeping laptop or a flaky bar of
+    // wifi all land here. Latching standalone on that swapped the club's real
+    // staff for the built-in sample roster and quietly redirected every edit
+    // into localStorage, so profiles appeared to vanish and changes to them
+    // never reached the server. Only a host we already know is static may
+    // decide this way; anywhere else we stay undecided and surface the error,
+    // which the apps already handle as "offline".
+    if (STATIC_HOST) {
+      activateStandalone(err && err.message ? err.message : 'request failed');
+      return serveLocally(path, method, init);
+    }
+    throw err;
   });
 };
 

@@ -158,6 +158,27 @@ select,.icon-btn{
 </head>
 <body>
 
+<!-- Shown when this screen has no key. Silence used to look identical to a
+     quiet kitchen, which is the worst possible failure for a display. -->
+<div id="kds-setup" style="display:none;position:fixed;inset:0;z-index:200;background:#0b0f14;
+  color:#e6edf3;display:none;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:40px 28px;font-family:inherit">
+  <div style="font-size:3.4rem;margin-bottom:6px">🔌</div>
+  <h1 style="font-size:1.7rem;font-weight:800;margin-bottom:10px">This screen isn't paired yet</h1>
+  <p style="font-size:1rem;color:#8b949e;max-width:520px;line-height:1.6">
+    It can't read the ticket feed, so no orders will appear — including the ones guests
+    send from their chairs.
+  </p>
+  <p style="font-size:1rem;color:#8b949e;max-width:520px;line-height:1.6;margin-top:14px">
+    On the manager's dashboard open <strong style="color:#e6edf3">Kitchen</strong>,
+    add a screen, and open the link it gives you <em>on this tablet</em>. It only has to be
+    done once — the key is saved here afterwards.
+  </p>
+  <button onclick="location.reload()" style="margin-top:26px;padding:14px 30px;border:none;
+    border-radius:10px;background:#2563eb;color:#fff;font-size:1rem;font-weight:800;
+    cursor:pointer;font-family:inherit">Try again</button>
+</div>
+
 <header>
   <div class="dot" id="live-dot"></div>
   <div class="brand">🍔 Kitchen Display<span id="pool-lbl"></span></div>
@@ -215,8 +236,27 @@ let lastOk   = Date.now();
 // Age thresholds (minutes) — a ticket that sits goes amber, then red and pulses.
 const WARN_MIN = 6, LATE_MIN = 10;
 
+/* ── Device key ───────────────────────────────────────────────────────────
+   Nobody signs into a screen bolted to a kitchen wall, and a staff session
+   would lapse mid-service and blank the board with no warning. So the screen
+   carries its own long-lived key, scoped to reading tickets and bumping them.
+   It arrives once in the URL a manager opens, then lives in localStorage and
+   travels as a header — so the key isn't sitting in the address bar all day. */
+const _urlKey = new URLSearchParams(location.search).get('device');
+if (_urlKey) {
+  localStorage.setItem('kds_device', _urlKey);
+  const clean = new URL(location.href);
+  clean.searchParams.delete('device');
+  history.replaceState({}, '', clean);
+}
+const DEVICE = localStorage.getItem('kds_device') || '';
+function authHeaders(extra) {
+  const h = Object.assign({}, extra || {});
+  if (DEVICE) h['X-Device-Token'] = DEVICE;
+  return h;
+}
 const post = async (path, body) =>
-  (await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)})).json();
+  (await fetch(path, {method:'POST', headers:authHeaders({'Content-Type':'application/json'}), body:JSON.stringify(body)})).json();
 
 // ══ Chime ═════════════════════════════════════════════════════════════════
 // Synthesised so the page stays a single file with no asset to lose.
@@ -346,6 +386,12 @@ function tickAges() {
   });
 }
 
+function showUnpaired() {
+  const el = document.getElementById('kds-setup');
+  el.style.display = 'flex';
+  document.getElementById('live-dot').classList.add('stale');
+}
+
 // ══ Data ══════════════════════════════════════════════════════════════════
 // ══ Sign-in gate ══════════════════════════════════════════════════════════
 async function openGate() {
@@ -385,14 +431,24 @@ async function load() {
 async function _load() {
   try {
     const q = poolId ? `?poolId=${poolId}` : '';
+    // Two ways this screen can be authorised: a device key (never expires, and
+    // is what a permanent wall screen should use) or a staff sign-in (fine for
+    // a phone someone is holding). Send the key if we have one and fall back
+    // to the sign-in gate if we don't.
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 8000);
     let res;
-    try { res = await fetch('/api/orders' + q, { signal: ctl.signal }); }
+    try { res = await fetch('/api/orders' + q, {headers: authHeaders(), signal: ctl.signal}); }
     finally { clearTimeout(timer); }
-    if (res.status === 401 || res.status === 403) { openGate(); return; }
+    if (res.status === 401 || res.status === 403) {
+      // A key that stopped working was revoked or rotated, so signing in won't
+      // help — say so. With no key at all, the gate is the quicker way in.
+      if (DEVICE) showUnpaired(); else openGate();
+      return;
+    }
     const d = await res.json();
     lastOk = Date.now();
+    document.getElementById('kds-setup').style.display = 'none';
 
     // Pool picker (first load, or when pools change)
     const sel = document.getElementById('pool-sel');

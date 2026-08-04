@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Pool Manager — Chair QR Codes</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root { --blue:#023e8a; --blue-light:#0284c7; --ink:#111827; --muted:#6b7280; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; background:#e5e7eb; padding:26px 20px 60px;
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; letter-spacing:-.011em; color:var(--ink); }
+
+  .screen-only { max-width:900px; margin:0 auto 26px; text-align:center; }
+  .screen-only h1 { font-size:1.4rem; color:var(--blue); margin-bottom:6px; }
+  .screen-only p { color:var(--muted); font-size:.9rem; line-height:1.5; margin-bottom:16px; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-items:center; }
+  .btn { padding:10px 22px; background:var(--blue); color:#fff; border:none; border-radius:8px;
+    font-size:.95rem; font-weight:600; cursor:pointer; font-family:inherit; }
+  .btn:hover { opacity:.88; }
+  .btn.sec { background:#fff; color:var(--blue); border:1px solid #cbd5e1; }
+  select { padding:9px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:.9rem;
+    font-family:inherit; background:#fff; cursor:pointer; }
+  label.ctl { font-size:.85rem; color:var(--muted); font-weight:600; display:flex; align-items:center; gap:7px; }
+
+  .grid { max-width:1000px; margin:0 auto; display:grid; gap:18px; }
+  .grid.sz-small  { grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); }
+  .grid.sz-medium { grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); }
+  .grid.sz-large  { grid-template-columns:repeat(auto-fill,minmax(420px,1fr)); }
+
+  .card { background:#fff; border-radius:12px; padding:20px 16px 16px; box-shadow:0 4px 16px rgba(0,0,0,.12);
+    display:flex; flex-direction:column; align-items:center; text-align:center; page-break-inside:avoid;
+    break-inside:avoid; border:2px solid transparent; }
+  .card .pool { font-size:.62rem; font-weight:700; color:#9ca3af; text-transform:uppercase;
+    letter-spacing:.12em; margin-bottom:2px; }
+  .card .chair { font-size:2.1rem; font-weight:800; color:var(--blue); line-height:1.05; }
+  .card .kicker { font-size:.78rem; color:#374151; margin:5px 0 13px; line-height:1.35; }
+  .qr { background:#fff; padding:9px; border:3px solid #e5e7eb; border-radius:9px; }
+  .qr canvas, .qr img { display:block; }
+  .card .how { font-size:.66rem; color:var(--muted); margin-top:11px; line-height:1.45; }
+  .card .url { font-size:.55rem; font-family:ui-monospace,Menlo,monospace; color:#9ca3af;
+    margin-top:7px; word-break:break-all; }
+
+  .grid.sz-small .chair { font-size:1.5rem; }
+  .grid.sz-small .kicker { font-size:.68rem; margin-bottom:10px; }
+  .grid.sz-large .chair { font-size:3rem; }
+  .grid.sz-large .kicker { font-size:.95rem; }
+  .grid.sz-large .how { font-size:.8rem; }
+
+  /* The gate/snack-bar poster: one code, guest types their own chair number */
+  .card.house { border-color:var(--blue-light); background:#f0f9ff; }
+  .card.house .chair { font-size:1.35rem; }
+
+  .note { max-width:900px; margin:22px auto 0; background:#fffbeb; border:1px solid #fde68a;
+    border-radius:9px; padding:13px 16px; font-size:.82rem; color:#92400e; line-height:1.5; }
+  .empty { max-width:640px; margin:40px auto; background:#fff; border-radius:12px; padding:34px 26px;
+    text-align:center; color:var(--muted); font-size:.92rem; line-height:1.6; }
+
+  @media print {
+    body { background:#fff; padding:0; }
+    .screen-only, .note { display:none !important; }
+    .grid { max-width:100%; gap:0; display:block; }
+    .card { box-shadow:none; border:1.5px dashed #9ca3af; border-radius:8px; margin:0;
+      display:inline-flex; vertical-align:top; }
+    /* Cut lines land between cards, so a sheet guillotines into stickers. */
+    .grid.sz-small .card  { width:32%; min-height:2.6in; }
+    .grid.sz-medium .card { width:48%; min-height:3.6in; }
+    .grid.sz-large .card  { width:98%; min-height:5in; }
+    .card .url { color:#6b7280; }
+  }
+</style>
+</head>
+<body>
+
+<div class="screen-only">
+  <h1>🪑 Chair QR Codes</h1>
+  <p id="blurb">Loading chairs…</p>
+  <div class="controls">
+    <label class="ctl">Size
+      <select id="size" onchange="render()">
+        <option value="small">Small — 9 per page</option>
+        <option value="medium" selected>Medium — 6 per page</option>
+        <option value="large">Large — 2 per page</option>
+      </select>
+    </label>
+    <label class="ctl"><input type="checkbox" id="show-house" checked onchange="render()"/> Include a gate poster</label>
+    <button class="btn" onclick="window.print()">🖨️ Print / Save as PDF</button>
+    <button class="btn sec" onclick="location.href='/maralavitchmanagement'">← Back to dashboard</button>
+  </div>
+</div>
+
+<div class="grid sz-medium" id="grid"></div>
+
+<div class="note" id="note"></div>
+
+<script>
+/* One printable code per lounger. Each deep-links to the guest ordering page
+   with that chair already attached, so a drink ordered from A7 is delivered to
+   A7 without anybody typing a number. */
+const qs = new URLSearchParams(location.search);
+let POOL = Number(qs.get('pool')) || null;
+let DATA = null, BASE = location.origin;
+
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function boot() {
+  // The LAN address staff phones actually use, when the server knows it.
+  try {
+    const ip = await (await fetch('/api/ip')).json();
+    if (ip && ip.base_url) BASE = ip.base_url;
+  } catch (e) { /* not signed in, or deployed — location.origin is right anyway */ }
+
+  if (!POOL) {
+    // No pool in the URL: fall back to whichever the dashboard last had open.
+    const saved = Number(localStorage.getItem('pm_active_pool'));
+    if (saved) POOL = saved;
+  }
+  if (!POOL) return bail('No pool selected. Open the Layout tab in the dashboard and use the “Print chair QR codes” button there.');
+
+  let r;
+  try {
+    r = await (await fetch('/api/guest/menu?pool=' + encodeURIComponent(POOL))).json();
+  } catch (e) { return bail('Could not reach the pool server.'); }
+  if (!r.ok) return bail(r.error || 'That pool could not be found.');
+  DATA = r;
+  render();
+}
+
+function bail(msg) {
+  document.getElementById('blurb').textContent = '';
+  document.getElementById('grid').innerHTML = `<div class="empty">${esc(msg)}</div>`;
+  document.getElementById('note').style.display = 'none';
+}
+
+function chairURL(seat) { return `${BASE}/order?pool=${DATA.pool.id}&seat=${seat.id}`; }
+function houseURL()     { return `${BASE}/order?pool=${DATA.pool.id}`; }
+
+function render() {
+  const size = document.getElementById('size').value;
+  const px = {small: 104, medium: 148, large: 220}[size];
+  const grid = document.getElementById('grid');
+  grid.className = 'grid sz-' + size;
+  grid.innerHTML = '';
+
+  const seats = DATA.seats;
+  document.getElementById('blurb').innerHTML = seats.length
+    ? `<strong>${esc(DATA.pool.name)}</strong> — ${seats.length} chair${seats.length === 1 ? '' : 's'}.
+       Print, cut along the dashed lines, and tape one to each lounger.`
+    : `<strong>${esc(DATA.pool.name)}</strong> has no chairs laid out yet.`;
+
+  if (!seats.length) {
+    grid.innerHTML = `<div class="empty">No chairs in this pool's deck layout yet.<br/>
+      Build the deck on the <strong>Layout</strong> tab first, then come back here to print the codes.</div>`;
+    document.getElementById('note').style.display = 'none';
+    return;
+  }
+
+  if (document.getElementById('show-house').checked) {
+    grid.appendChild(card({
+      house: true,
+      pool: DATA.pool.name,
+      chair: 'Order to your chair',
+      kicker: 'Scan, then tell us which chair you\'re at',
+      url: houseURL(),
+      how: 'Put this at the gate or the snack bar counter.',
+    }, px));
+  }
+
+  seats.forEach(s => grid.appendChild(card({
+    pool: DATA.pool.name,
+    chair: s.label,
+    kicker: 'Scan to order drinks to this chair',
+    url: chairURL(s),
+    how: 'Point your camera here — no app to download.',
+  }, px)));
+
+  document.getElementById('note').style.display = '';
+  document.getElementById('note').innerHTML =
+    `⚠️ These codes point at <code>${esc(BASE)}</code>. That address has to be reachable from your guests'
+     phones — a <code>.local</code> or <code>192.168.x.x</code> address only works for phones on the pool's own
+     Wi-Fi. If guests will be on cellular data, deploy the app to its public address first and reprint,
+     or the codes will fail for them.`;
+}
+
+function card(o, px) {
+  const el = document.createElement('div');
+  el.className = 'card' + (o.house ? ' house' : '');
+  el.innerHTML = `
+    <div class="pool">${esc(o.pool)}</div>
+    <div class="chair">${esc(o.chair)}</div>
+    <div class="kicker">${esc(o.kicker)}</div>
+    <div class="qr"></div>
+    <div class="how">${esc(o.how)}</div>
+    <div class="url">${esc(o.url)}</div>`;
+  // correctLevel M keeps it readable after a summer of sunscreen and splashes
+  new QRCode(el.querySelector('.qr'), {
+    text: o.url, width: px, height: px, correctLevel: QRCode.CorrectLevel.M,
+  });
+  return el;
+}
+
+boot();
+</script>
+</body>
+</html>
