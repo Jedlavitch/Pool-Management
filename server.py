@@ -591,6 +591,10 @@ class Handler(BaseHTTPRequestHandler):
             serve_file(self, 'print-qr.html')
         elif p in ('/chair-qr', '/chair-qr.html'):
             serve_file(self, 'chair-qr.html')
+        elif p in ('/recover', '/recover.html', '/reset'):
+            # Deliberately reachable without signing in — it exists precisely for
+            # the case where a device won't let you sign in.
+            serve_file(self, 'recover.html')
         elif p == '/manifest.json':
             serve_file(self, 'manifest.json', 'application/manifest+json')
         elif p == '/sw.js':

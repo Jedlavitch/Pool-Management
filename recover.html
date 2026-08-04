@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Mar-A-Lavitch — Reset this device</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif;
+    background:#f1f5f9; color:#0f172a; min-height:100vh; display:flex; align-items:center;
+    justify-content:center; padding:24px; -webkit-font-smoothing:antialiased; }
+  .card { background:#fff; border-radius:16px; padding:32px 28px; max-width:520px; width:100%;
+    box-shadow:0 8px 30px rgba(0,0,0,.12); }
+  .em { font-size:2.8rem; text-align:center; }
+  h1 { font-size:1.4rem; font-weight:800; text-align:center; margin:10px 0 8px; color:#023e8a; }
+  p { font-size:.92rem; color:#475569; line-height:1.6; text-align:center; }
+  .btn { display:block; width:100%; padding:16px; margin-top:22px; border:none; border-radius:10px;
+    background:#0284c7; color:#fff; font-size:1rem; font-weight:800; cursor:pointer; font-family:inherit; }
+  .btn:disabled { background:#cbd5e1; cursor:default; }
+  .btn.go { background:#16a34a; }
+  .log { margin-top:20px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
+    padding:14px 16px; font-size:.84rem; line-height:1.8; display:none; }
+  .log div::before { content:'✓ '; color:#16a34a; font-weight:800; }
+  .links { margin-top:18px; display:none; gap:10px; flex-direction:column; }
+  .links a { display:block; padding:14px; border-radius:10px; background:#f1f5f9; color:#023e8a;
+    text-decoration:none; font-weight:700; text-align:center; font-size:.92rem; border:1px solid #e2e8f0; }
+  .note { margin-top:18px; background:#fffbeb; border:1px solid #fde68a; border-radius:10px;
+    padding:12px 14px; font-size:.82rem; color:#92400e; line-height:1.55; text-align:left; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="em">🔧</div>
+  <h1>Reset this device</h1>
+  <p>
+    Clears everything this phone, tablet or computer has stored for the pool apps — the offline
+    copy, the saved sign-in, and the cached app files. Your staff, schedule, menu and sales all
+    live on the server and are <strong>not</strong> touched.
+  </p>
+  <button class="btn" id="go" onclick="run()">Reset this device</button>
+  <div class="log" id="log"></div>
+  <div class="links" id="links">
+    <a href="/maralavitchstaff">Open the staff app →</a>
+    <a href="/maralavitchmanagement">Open the management dashboard →</a>
+    <a href="/kds">Open the kitchen display →</a>
+  </div>
+  <div class="note">
+    Use this when the app shows names you don't recognise, refuses a password you know is right,
+    or keeps signing you out. It's safe to run any time and on any number of devices.
+  </div>
+</div>
+
+<script>
+const log = m => {
+  const el = document.getElementById('log');
+  el.style.display = 'block';
+  const d = document.createElement('div');
+  d.textContent = m;
+  el.appendChild(d);
+};
+
+async function run() {
+  const btn = document.getElementById('go');
+  btn.disabled = true; btn.textContent = 'Resetting…';
+
+  // 1. The offline dataset. This is the one that shows a sample roster instead
+  //    of the real staff when a device has fallen back to standalone mode.
+  try {
+    let n = 0;
+    for (const k of Object.keys(localStorage)) {
+      if (/^mal[-_]|^pm_/.test(k)) { localStorage.removeItem(k); n++; }
+    }
+    log(`Cleared ${n} stored item${n === 1 ? '' : 's'} (offline copy + saved sign-in)`);
+  } catch (e) { log('Local storage was already clear'); }
+
+  try { sessionStorage.clear(); log('Cleared this session'); } catch (e) {}
+
+  // 2. The server-side session cookie, so the next sign-in starts clean.
+  try {
+    await fetch('/api/logout', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+    log('Signed out on the server');
+  } catch (e) { log('Server sign-out skipped (offline)'); }
+
+  // 3. Cached app files, so the device picks up the current version rather than
+  //    replaying an old one that still has the bug.
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+      log(`Removed ${regs.length} cached app registration${regs.length === 1 ? '' : 's'}`);
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+      log(`Emptied ${keys.length} file cache${keys.length === 1 ? '' : 's'}`);
+    }
+  } catch (e) { log('Cache clear skipped'); }
+
+  log('Done — this device is back to a clean state');
+  btn.textContent = 'Reset complete ✓';
+  btn.classList.add('go');
+  document.getElementById('links').style.display = 'flex';
+}
+</script>
+</body>
+</html>
