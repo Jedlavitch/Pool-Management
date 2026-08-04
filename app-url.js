@@ -9,4 +9,4 @@
  * Leave it empty and the landing page says the address isn't set yet rather
  * than opening something that cannot work.
  */
-window.APP_URL = '';
+window.APP_URL = 'https://web-production-d77ca.up.railway.app';
