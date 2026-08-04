@@ -34,6 +34,25 @@ IS_PUBLIC = bool(PUBLIC_HOST)
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', '')
 
 
+def nobody_can_sign_in(data):
+    """True when a public deploy has locked everyone out: employees exist, not
+    one of them has a password, and there's no ADMIN_PASSWORD to fall back on.
+    Sign-in then refuses every account with "a manager must set your password"
+    while the only manager is on the wrong side of the door."""
+    if not IS_PUBLIC or ADMIN_PASSWORD:
+        return False
+    emps = data.get('employees') or []
+    return bool(emps) and not any(e.get('password') for e in emps)
+
+
+def claim_code():
+    """A short code that only somebody who can read the deploy's log can see —
+    which on Railway (or anywhere else) means the person who owns it. Derived
+    from the signing key, so it survives a restart without being stored, and
+    dies the moment the first password is set."""
+    return hmac.new(SECRET, b'account-claim', hashlib.sha256).hexdigest()[:10].upper()
+
+
 def _load_secret():
     """Key that signs session tokens. From the environment when provided,
     otherwise generated once and kept beside the data (gitignored). Rotating
@@ -521,6 +540,10 @@ class Handler(BaseHTTPRequestHandler):
                               for e in d.get('employees', [])],
                 'signed_in': bool(self.current_user()),
                 'requires_password': IS_PUBLIC,
+                # Offering "Administrator" when no ADMIN_PASSWORD is configured
+                # just hands back "Employee not found" to someone already locked out.
+                'admin_available': bool(ADMIN_PASSWORD),
+                'needs_claim': nobody_can_sign_in(d),
                 # Nobody enrolled and no admin password configured: the club
                 # still has to be created, so the dashboard opens unlocked.
                 'setup_mode': not d.get('employees') and not ADMIN_PASSWORD,
@@ -795,11 +818,34 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({'ok': False, 'error': 'Employee not found'}, 404)
                 return
 
+            # Locked-out deploy: let the owner claim an account with the code
+            # printed in the server log. Only available while nobody at all has
+            # a password, so it shuts itself the instant the first one is set.
+            if body.get('claim') and nobody_can_sign_in(data):
+                if hmac.compare_digest(str(body.get('claim')).strip().upper(), claim_code()):
+                    if not password:
+                        self.send_json({'ok': False, 'error': 'Choose a password.'}, 400); return
+                    emp['password'] = hash_password(password)
+                    save_data(data)
+                    self.send_json({'ok': True, 'role': emp.get('role', ''), 'name': emp.get('name', ''),
+                                    'claimed': True}, session=str(emp['id']))
+                else:
+                    self.send_json({'ok': False, 'error': 'That code does not match the one in the server log.'}, 401)
+                return
+
             stored = emp.get('password')
             if not stored:
                 # On the LAN this is the long-standing convenience: pick your
                 # name and you're in. Once the app is on the public internet a
                 # blank password is not a credential, so it's refused there.
+                if IS_PUBLIC and nobody_can_sign_in(data):
+                    # Nobody can let anyone in, so point at the way out rather
+                    # than repeating advice that cannot be followed.
+                    self.send_json({'ok': False, 'needs_claim': True, 'error':
+                        'Nobody on this club has a password yet, so there is no manager who can set one. '
+                        'Open your hosting dashboard\'s log — the server prints a one-time claim code at '
+                        'startup — then enter it here to set your own password.'}, 403)
+                    return
                 if IS_PUBLIC:
                     self.send_json({'ok': False, 'needs_password': True,
                                     'error': 'A manager must set your password before you can sign in.'}, 403)
@@ -1658,8 +1704,20 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     ip = get_local_ip()
-    print(f'Pool Manager → http://localhost:{PORT}')
+    print(f"Pool Manager → http://localhost:{PORT}", flush=True)
     print(f'Guard QR URL → http://{ip}:{PORT}/quicklog')
+    # Loud on purpose: if this prints, nobody can currently sign in, and this
+    # code is the only way back in short of an ADMIN_PASSWORD.
+    if nobody_can_sign_in(load_data()):
+        # flush=True because a hosting platform pipes stdout: without it this
+        # banner can sit in a buffer for ages, which is useless to someone
+        # standing outside their own locked club reading the log.
+        print('\n  ' + '=' * 58, flush=True)
+        print('  NOBODY ON THIS CLUB HAS A PASSWORD — sign-in is refusing everyone.', flush=True)
+        print('  Claim your account on the sign-in screen with this code:', flush=True)
+        print(f'\n        CLAIM CODE:  {claim_code()}\n', flush=True)
+        print('  It stops working the moment the first password is set.', flush=True)
+        print('  ' + '=' * 58 + '\n', flush=True)
     # Threaded server: handle many devices at once so the app never appears
     # "offline" just because another request is in flight.
     server = ThreadingHTTPServer(('0.0.0.0', PORT), Handler)
