@@ -1217,7 +1217,16 @@ function onSessionLost() {
   show('name');
 }
 async function apiFetch(path, options) {
-  const res = await fetch(path, options);
+  // Pool WiFi hangs more than it fails. An abandoned request would otherwise
+  // wedge its single-flight guard forever and quietly stop that poller.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 10000);
+  let res;
+  try {
+    res = await fetch(path, { ...(options || {}), signal: ctl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
   if (res.status === 401) { onSessionLost(); throw new Error('Signed out'); }
   // A refusal on grounds of rank used to be as quiet as a lapsed session: the
   // button did nothing and said nothing. Say it, since no caller does.
@@ -2798,6 +2807,11 @@ function squareReady() { return !!squareAppId(); }
 // Square returns to a URL, which reloads this page — so the tab being paid has
 // to survive the round trip somewhere other than memory.
 async function chargeViaSquare() {
+  if (_charging) return;
+  _charging = true;
+  try { await _chargeViaSquare(); } finally { _charging = false; }
+}
+async function _chargeViaSquare() {
   const t = cartTotals();
   const amount = t.total;
   if (amount <= 0) return alert('Nothing to charge.');
@@ -2867,7 +2881,12 @@ async function finishSquareReturn() {
 }
 let _squareJustPaid = null;
 
+// One charge in flight at a time. A pool deck is exactly where a button gets
+// tapped twice — wet fingers, sun glare, a slow response — and before this
+// guard, each tap was its own order and its own charge.
+let _charging = false;
 async function submitOrder(holdOpen) {
+  if (_charging) return;
   const t = cartTotals();
   if (!cart.length) return;
   if (payMethod === 'cash' && !holdOpen && cashTendered && cashTendered < t.total)
@@ -2877,27 +2896,39 @@ async function submitOrder(holdOpen) {
   if (payMethod === 'account' && !holdOpen && !account.trim())
     return alert('Enter which member account to charge.');
 
-  const payload = {
-    payment: payMethod, cashTendered: cashTendered / 100, account, compReason,
-  };
-  let res;
-  if (payingTabId) {
-    res = await post('/api/order/pay', { id: payingTabId, ...payload });
-  } else {
-    res = await post('/api/order', {
-      poolId: Number(activePoolId), seatId: cartSeat?.id ?? null, seatLabel: cartSeat?.label || '',
-      items: cart.map(li => ({ menuId: li.menuId, name: li.name, price: li.price / 100,
-                               qty: li.qty, note: li.note, mods: li.mods || [] })),
-      holdOpen, empId, empName, ...payload,
-    });
+  const btn = document.getElementById('charge-btn');
+  const hold = document.querySelector('#screen-cart .btn-next');
+  _charging = true;
+  const was = btn.textContent;
+  btn.disabled = true; if (hold) hold.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const payload = {
+      payment: payMethod, cashTendered: cashTendered / 100, account, compReason,
+    };
+    let res;
+    if (payingTabId) {
+      res = await post('/api/order/pay', { id: payingTabId, ...payload });
+    } else {
+      res = await post('/api/order', {
+        poolId: Number(activePoolId), seatId: cartSeat?.id ?? null, seatLabel: cartSeat?.label || '',
+        items: cart.map(li => ({ menuId: li.menuId, name: li.name, price: li.price / 100,
+                                 qty: li.qty, note: li.note, mods: li.mods || [] })),
+        holdOpen, empId, empName, ...payload,
+      });
+    }
+    if (!res.ok) return alert(res.error || 'Could not save the order.');
+    const o = res.order;
+    cart = []; cartSeat = null; cashTendered = 0; payingTabId = null;
+    await loadPos();
+    updateCartBar();
+    if (holdOpen) { showTab('order'); setPosView('tabs'); return; }
+    showReceipt(o);
+  } finally {
+    _charging = false;
+    btn.disabled = false; if (hold) hold.disabled = false;
+    btn.textContent = was;
   }
-  if (!res.ok) return alert(res.error || 'Could not save the order.');
-  const o = res.order;
-  cart = []; cartSeat = null; cashTendered = 0; payingTabId = null;
-  await loadPos();
-  updateCartBar();
-  if (holdOpen) { showTab('order'); setPosView('tabs'); return; }
-  showReceipt(o);
 }
 
 function showReceipt(o) {
@@ -3114,18 +3145,44 @@ async function init() {
     await loadNameList();
     show('name');
   }
+  // Pollers: single-flight, so a slow answer can never overlap the next ask —
+  // overlapping responses resolve out of order and paint old state over new.
+  const guarded = fn => {
+    let busy = false;
+    return async () => {
+      if (busy) return;
+      busy = true;
+      try { await fn(); } catch (e) { /* next tick retries */ } finally { busy = false; }
+    };
+  };
+  const pollNotifs = guarded(() => renderNotifications());
+  const pollKitchen = guarded(() => renderHomeKitchen());
+
   // Poll for new notifications (e.g. messages from management) ~every 30s
   setInterval(() => {
-    if (empId && activePoolId != null) renderNotifications().catch(() => {});
+    if (empId && activePoolId != null) pollNotifs();
   }, 30000);
   // Food moves faster than messages — refresh the kitchen card every 8s so a
   // waiter sees "Ready" without opening anything.
   setInterval(() => {
     if (empId && activePoolId != null &&
         document.getElementById('screen-home').classList.contains('active')) {
-      renderHomeKitchen().catch(() => {});
+      pollKitchen();
     }
   }, 8000);
+
+  // A locked phone throttles timers to nothing. Refresh the moment the screen
+  // comes back, instead of showing last hour's state until the next tick —
+  // this is most of what made the app feel stale on the deck.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !empId || activePoolId == null) return;
+    pollNotifs();
+    const active = document.querySelector('.screen.active')?.id;
+    if (active === 'screen-home') { pollKitchen(); loadHome().catch(() => {}); }
+    if (active === 'screen-deck') renderDeck().catch(() => {});
+    if (active === 'screen-order') loadPos().then(() => setPosView(posView)).catch(() => {});
+    if (active === 'screen-board') renderBoard().catch(() => {});
+  });
 }
 init();
 </script>

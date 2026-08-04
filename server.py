@@ -430,6 +430,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200); self.cors(); self.end_headers()
 
     def do_GET(self):
+        try:
+            self._handle_get()
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            try:
+                self.send_json({'ok': False, 'error': 'Server error — try again.'}, 500)
+            except Exception:
+                pass
+
+    def _handle_get(self):
         p = urlparse(self.path).path
 
         # The pages themselves are just shells — they show a sign-in screen and
@@ -529,8 +540,19 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         # Hold the data lock across the whole read-modify-write so simultaneous
         # writes from multiple devices can't overwrite each other.
-        with _DATA_LOCK:
-            self._handle_post()
+        try:
+            with _DATA_LOCK:
+                self._handle_post()
+        except Exception:
+            # Without this, an unexpected error mid-handler just drops the
+            # connection: the waiter's button "does nothing", nothing is logged,
+            # and the bug is invisible. Answer in JSON and leave a trace.
+            import traceback
+            traceback.print_exc()
+            try:
+                self.send_json({'ok': False, 'error': 'Server error — try again.'}, 500)
+            except Exception:
+                pass  # connection already gone; the log line is what matters
 
     def _handle_post(self):
         p = urlparse(self.path).path

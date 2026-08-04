@@ -373,10 +373,23 @@ async function gateSignIn() {
   } catch (e) { err.textContent = 'Could not reach the server.'; }
 }
 
+let _loadBusy = false;
 async function load() {
+  // Single flight with a hard timeout. Without it, a hung request on flaky
+  // WiFi stacks up behind the 3s timer, and late responses then land out of
+  // order — painting an old board over a newer one.
+  if (_loadBusy) return;
+  _loadBusy = true;
+  try { await _load(); } finally { _loadBusy = false; }
+}
+async function _load() {
   try {
     const q = poolId ? `?poolId=${poolId}` : '';
-    const res = await fetch('/api/orders' + q);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 8000);
+    let res;
+    try { res = await fetch('/api/orders' + q, { signal: ctl.signal }); }
+    finally { clearTimeout(timer); }
     if (res.status === 401 || res.status === 403) { openGate(); return; }
     const d = await res.json();
     lastOk = Date.now();
@@ -437,6 +450,11 @@ document.body.addEventListener('click', () => { if (actx && actx.state === 'susp
 clock(); setInterval(clock, 1000);
 setInterval(tickAges, 1000);   // keep the age timers moving
 load(); setInterval(load, 3000);
+// Tablets sleep. Refresh the instant the screen wakes rather than serving
+// yesterday's board for a beat — and the stale dot recovers immediately too.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') load();
+});
 </script>
 </body>
 </html>

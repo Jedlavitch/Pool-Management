@@ -990,6 +990,13 @@ setInterval(() => {
   }
 }, 10000);
 
+// Coming back to a dashboard tab that sat in the background all afternoon
+// should show now, not when it was left.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  refresh().then(rerenderActive).catch(() => {});
+});
+
 // ── QR Code ────────────────────────────────────────────────────────────────
 async function buildQR() {
   try {
