@@ -1,0 +1,1507 @@
+{
+  "employees": [
+    {
+      "name": "Jack Edlavitch",
+      "role": "Manager",
+      "phone": "2023209020",
+      "id": 1781111821144,
+      "password": "1111",
+      "poolIds": [
+        1781142303038
+      ]
+    },
+    {
+      "name": "John Doe",
+      "role": "Lifeguard",
+      "phone": "",
+      "id": 1781113250677,
+      "poolIds": [
+        1781142303038
+      ]
+    },
+    {
+      "name": "Charlie Edlavitch",
+      "role": "Lifeguard",
+      "phone": "",
+      "id": 1781113261168,
+      "poolIds": [
+        1781142303038
+      ]
+    },
+    {
+      "name": "Jose Maderno",
+      "role": "Maintenance",
+      "phone": "",
+      "poolIds": [
+        1781142303038
+      ],
+      "password": "2222",
+      "id": 1781144308652
+    },
+    {
+      "name": "House Owner *Testing*",
+      "role": "Owner",
+      "phone": "",
+      "poolIds": [
+        1781142303038
+      ],
+      "id": 1781548440129
+    }
+  ],
+  "chemicals": [
+    {
+      "date": "2026-06-15",
+      "time": "14:30",
+      "type": "hourly",
+      "cl": 1.2,
+      "ph": 7.5,
+      "ccl": null,
+      "by": "Jack Edlavitch",
+      "poolId": 1781142303038,
+      "notes": "",
+      "id": 1781548249313,
+      "status": "pass"
+    },
+    {
+      "date": "2026-06-10",
+      "time": "23:05",
+      "type": "hourly",
+      "cl": 1.2,
+      "ph": 7.5,
+      "ccl": null,
+      "by": "John Doe",
+      "poolId": 1781142303038,
+      "notes": "",
+      "id": 1781147104419,
+      "status": "pass"
+    },
+    {
+      "date": "2026-06-10",
+      "time": "14:38",
+      "type": "hourly",
+      "cl": 1.2,
+      "ph": 7.6,
+      "ccl": null,
+      "by": "Jack Edlavitch",
+      "notes": "",
+      "id": 1781116738274,
+      "status": "pass",
+      "poolId": 1781142303038
+    },
+    {
+      "date": "2026-06-10",
+      "time": "13:17",
+      "type": "hourly",
+      "cl": 1.2,
+      "ph": 7.4,
+      "ccl": null,
+      "by": "Jack Edlavitch",
+      "notes": "Green",
+      "id": 1781111846491,
+      "status": "pass",
+      "poolId": 1781142303038
+    }
+  ],
+  "shifts": [
+    {
+      "empId": "1781113250677",
+      "empName": "John Doe",
+      "date": "2026-06-11",
+      "start": "10:00",
+      "end": "14:45",
+      "role": "Lifeguard",
+      "id": 1781113293426,
+      "poolId": 1781142303038
+    },
+    {
+      "empId": "1781113261168",
+      "empName": "Charlie Edlavitch",
+      "date": "2026-06-10",
+      "start": "14:00",
+      "end": "20:00",
+      "role": "Lifeguard",
+      "id": 1781113383659,
+      "poolId": 1781142303038
+    },
+    {
+      "empId": "1781144308652",
+      "empName": "Jose Maderno",
+      "date": "2026-06-10",
+      "start": "13:00",
+      "end": "15:00",
+      "role": "Maintenance",
+      "poolId": 1781142303038,
+      "id": 1781145008946
+    },
+    {
+      "empId": "1781144308652",
+      "empName": "Jose Maderno",
+      "date": "2026-06-11",
+      "start": "13:00",
+      "end": "15:00",
+      "role": "Maintenance",
+      "poolId": 1781142303038,
+      "id": 1781145008947
+    },
+    {
+      "empId": "1781144308652",
+      "empName": "Jose Maderno",
+      "date": "2026-06-12",
+      "start": "13:00",
+      "end": "15:00",
+      "role": "Maintenance",
+      "poolId": 1781142303038,
+      "id": 1781145008948
+    },
+    {
+      "empId": "1781144308652",
+      "empName": "Jose Maderno",
+      "date": "2026-06-13",
+      "start": "13:00",
+      "end": "15:00",
+      "role": "Maintenance",
+      "poolId": 1781142303038,
+      "id": 1781145008949
+    },
+    {
+      "empId": "1781144308652",
+      "empName": "Jose Maderno",
+      "date": "2026-06-14",
+      "start": "13:00",
+      "end": "15:00",
+      "role": "Maintenance",
+      "poolId": 1781142303038,
+      "id": 1781145008950
+    },
+    {
+      "empId": "1781144308652",
+      "empName": "Jose Maderno",
+      "date": "2026-06-15",
+      "start": "13:00",
+      "end": "15:00",
+      "role": "Maintenance",
+      "poolId": 1781142303038,
+      "id": 1781145008951
+    },
+    {
+      "empId": "1781144308652",
+      "empName": "Jose Maderno",
+      "date": "2026-06-16",
+      "start": "13:00",
+      "end": "15:00",
+      "role": "Maintenance",
+      "poolId": 1781142303038,
+      "id": 1781145008952
+    },
+    {
+      "empId": "1781144308652",
+      "empName": "Jose Maderno",
+      "date": "2026-06-17",
+      "start": "13:00",
+      "end": "15:00",
+      "role": "Maintenance",
+      "poolId": 1781142303038,
+      "id": 1781145008953
+    },
+    {
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "date": "2026-06-10",
+      "start": "10:00",
+      "end": "20:00",
+      "role": "Manager",
+      "poolId": 1781142303038,
+      "id": 1781145874988
+    },
+    {
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "date": "2026-06-11",
+      "start": "10:00",
+      "end": "20:00",
+      "role": "Manager",
+      "poolId": 1781142303038,
+      "id": 1781145874989
+    },
+    {
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "date": "2026-06-12",
+      "start": "10:00",
+      "end": "20:00",
+      "role": "Manager",
+      "poolId": 1781142303038,
+      "id": 1781145874990
+    },
+    {
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "date": "2026-06-13",
+      "start": "10:00",
+      "end": "20:00",
+      "role": "Manager",
+      "poolId": 1781142303038,
+      "id": 1781145874991
+    },
+    {
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "date": "2026-06-14",
+      "start": "10:00",
+      "end": "20:00",
+      "role": "Manager",
+      "poolId": 1781142303038,
+      "id": 1781145874992
+    },
+    {
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "date": "2026-06-15",
+      "start": "10:00",
+      "end": "20:00",
+      "role": "Manager",
+      "poolId": 1781142303038,
+      "id": 1781145874993
+    },
+    {
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "date": "2026-06-16",
+      "start": "10:00",
+      "end": "20:00",
+      "role": "Manager",
+      "poolId": 1781142303038,
+      "id": 1781145874994
+    },
+    {
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "date": "2026-06-17",
+      "start": "10:00",
+      "end": "20:00",
+      "role": "Manager",
+      "poolId": 1781142303038,
+      "id": 1781145874995
+    }
+  ],
+  "punches": [
+    {
+      "id": 1781113787182,
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "date": "2026-06-10",
+      "in": "13:49",
+      "out": "14:33",
+      "hours": 0.73,
+      "checkin_answers": {
+        "water_clarity": "clear",
+        "debris_in_water": "none",
+        "deck_condition": "clean",
+        "life_ring": "yes",
+        "reach_pole": "yes",
+        "first_aid": "stocked",
+        "ci_notes": ""
+      },
+      "checkin_flags": [],
+      "poolId": 1781142303038
+    },
+    {
+      "id": 1781116422390,
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "date": "2026-06-10",
+      "in": "14:33",
+      "out": "15:11",
+      "hours": 0.63,
+      "checkout_answers": {
+        "trash": true,
+        "skimmers": true,
+        "deck": true,
+        "equipment": true,
+        "chemicals": true,
+        "restrooms": true,
+        "co_notes": ""
+      },
+      "checkout_photo": "photo_1781118677285.jpg",
+      "checkout_flags": [],
+      "poolId": 1781142303038
+    },
+    {
+      "id": 1781143004659,
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "poolId": 1781142303038,
+      "date": "2026-06-10",
+      "in": "21:56",
+      "out": "22:06",
+      "hours": 0.17,
+      "checkin_answers": {
+        "water_clarity": "clear",
+        "debris": "minor",
+        "deck": "clean",
+        "life_ring": "yes",
+        "reach_pole": "yes",
+        "first_aid": "low",
+        "ci_notes": "Supervisor needs to come by and add chemicals"
+      },
+      "checkin_flags": [
+        "Debris in pool: minor",
+        "First aid kit: low"
+      ],
+      "checkout_answers": {
+        "trash": true,
+        "skimmers": true,
+        "deck_clean": true,
+        "equipment": true,
+        "co_notes": ""
+      },
+      "checkout_photo": "photo_1781143568846.jpg",
+      "checkout_flags": []
+    },
+    {
+      "id": 1781143589839,
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "poolId": 1781142303038,
+      "date": "2026-06-10",
+      "in": "22:06",
+      "out": "22:35",
+      "hours": 0.48,
+      "checkin_answers": {
+        "water_clarity": "hazy",
+        "debris": "significant",
+        "life_ring": "yes",
+        "deck": "wet",
+        "reach_pole": "no",
+        "first_aid": "missing",
+        "ci_notes": ""
+      },
+      "checkin_flags": [
+        "Water clarity: hazy",
+        "Debris in pool: significant",
+        "Deck condition: wet",
+        "Reach pole MISSING",
+        "First aid kit: missing"
+      ],
+      "checkout_answers": {
+        "trash": true,
+        "skimmers": true,
+        "deck_clean": true,
+        "equipment": true,
+        "chemicals": true,
+        "co_notes": ""
+      },
+      "checkout_photo": "photo_1781145353965.jpg",
+      "checkout_flags": []
+    },
+    {
+      "id": 1781147086928,
+      "empId": "1781113250677",
+      "empName": "John Doe",
+      "poolId": 1781142303038,
+      "date": "2026-06-10",
+      "in": "23:04",
+      "out": "23:05",
+      "hours": 0.02,
+      "checkin_answers": {
+        "water_clarity": "clear",
+        "debris": "none",
+        "deck": "clean",
+        "life_ring": "yes",
+        "reach_pole": "yes",
+        "first_aid": "missing",
+        "ci_notes": ""
+      },
+      "checkin_flags": [
+        "First aid kit: missing"
+      ],
+      "checkout_answers": {
+        "trash": true,
+        "skimmers": true,
+        "deck_clean": true,
+        "equipment": true,
+        "co_notes": ""
+      },
+      "checkout_photo": "photo_1781147149986.jpg",
+      "checkout_flags": []
+    },
+    {
+      "id": 1781548215831,
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "poolId": 1781142303038,
+      "date": "2026-06-15",
+      "in": "14:30",
+      "out": null,
+      "hours": null,
+      "checkin_answers": {
+        "water_clarity": "clear",
+        "debris": "none",
+        "deck": "clean",
+        "life_ring": "yes",
+        "reach_pole": "yes",
+        "first_aid": "stocked",
+        "ci_notes": ""
+      },
+      "checkin_flags": []
+    },
+    {
+      "id": 1785794816330,
+      "empId": "1781111821144",
+      "empName": "Jack Edlavitch",
+      "poolId": 1781142303038,
+      "date": "2026-08-03",
+      "in": "18:06",
+      "out": null,
+      "hours": null,
+      "checkin_answers": {
+        "water_clarity": "clear",
+        "debris": "none",
+        "deck": "clean",
+        "life_ring": "yes",
+        "reach_pole": "yes",
+        "first_aid": "stocked",
+        "ci_notes": ""
+      },
+      "checkin_flags": []
+    }
+  ],
+  "pool_status": "limited",
+  "announcements": [
+    {
+      "title": "Lifeguard Health & Well-Being",
+      "body": "Hey Team,\n\nAs lifeguards, your primary job is to keep our patrons safe\u2014but you can\u2019t look out for others if you aren\u2019t looking out for yourself first! The heat, sun, and constant alertness can take a heavy toll.\n\nPlease make sure you are practicing good self-care during your shifts:\n\nHydrate Constantly: Don't wait until you're thirsty. Keep a water bottle on your stand and drink throughout the day.\n\nProtect Your Skin: Reapply sunscreen (SPF 30+) every two hours, and utilize your umbrellas, hats, and polarized sunglasses to block UV rays.\n\nStay Sharp on Breaks: Use your rotation breaks to cool down, get into the shade, stretch, and grab a quick, nutritious snack to keep your energy up.\n\nSpeak Up: If you are feeling dizzy, overheated, or excessively fatigued, let a supervisor or a teammate know immediately. We always have your back.\n\nThank you for all your hard work and dedication to keeping our pool safe. Let\u2019s have a great, healthy season!",
+      "priority": "info",
+      "id": 1781118510989,
+      "posted": "2026-06-10 15:08",
+      "poolId": 1781142303038
+    }
+  ],
+  "resources": [
+    {
+      "title": "Emergency Procedures",
+      "desc": "EAP located in Kitchen",
+      "url": "",
+      "type": "procedure",
+      "id": 1781118479349,
+      "poolId": 1781142303038
+    }
+  ],
+  "shift_requests": [],
+  "shift_confirmations": {
+    "1781111821144_1781113307820": {
+      "confirmed": true,
+      "ts": "2026-06-10 16:12",
+      "note": ""
+    },
+    "1781111821144_1781113354053": {
+      "confirmed": true,
+      "ts": "2026-06-10 16:12",
+      "note": ""
+    },
+    "1781111821144_1781119867820": {
+      "confirmed": true,
+      "ts": "2026-06-10 16:12",
+      "note": ""
+    },
+    "1781111821144_1781113358789": {
+      "confirmed": true,
+      "ts": "2026-06-10 16:12",
+      "note": ""
+    },
+    "1781111821144_1781145874988": {
+      "confirmed": true,
+      "ts": "2026-06-10 22:45",
+      "note": ""
+    },
+    "1781111821144_1781145874989": {
+      "confirmed": true,
+      "ts": "2026-06-10 22:45",
+      "note": ""
+    },
+    "1781111821144_1781145874990": {
+      "confirmed": true,
+      "ts": "2026-06-10 22:45",
+      "note": ""
+    },
+    "1781111821144_1781145874991": {
+      "confirmed": true,
+      "ts": "2026-06-10 22:45",
+      "note": ""
+    },
+    "1781111821144_1781145874992": {
+      "confirmed": true,
+      "ts": "2026-06-10 22:45",
+      "note": ""
+    },
+    "1781111821144_1781145874993": {
+      "confirmed": true,
+      "ts": "2026-06-10 22:45",
+      "note": ""
+    },
+    "1781111821144_1781145874994": {
+      "confirmed": true,
+      "ts": "2026-06-10 22:45",
+      "note": ""
+    },
+    "1781111821144_1781145874995": {
+      "confirmed": true,
+      "ts": "2026-06-10 22:45",
+      "note": ""
+    },
+    "1781113250677_1781113293426": {
+      "confirmed": true,
+      "ts": "2026-06-10 23:04",
+      "note": ""
+    }
+  },
+  "notifications": [
+    {
+      "id": 1785937012585,
+      "empId": "1781548440129",
+      "poolId": 1781142303038,
+      "title": "\ud83d\udcf1 Chair A2 ordered",
+      "message": "1\u00d7 French Fries \u00b7 $4.00",
+      "read": false,
+      "ts": "2026-08-05 09:36"
+    },
+    {
+      "id": 1785937012584,
+      "empId": "1781111821144",
+      "poolId": 1781142303038,
+      "title": "\ud83d\udcf1 Chair A2 ordered",
+      "message": "1\u00d7 French Fries \u00b7 $4.00",
+      "read": false,
+      "ts": "2026-08-05 09:36"
+    },
+    {
+      "id": 1785794844606,
+      "empId": "1781113250677",
+      "poolId": 1781142303038,
+      "title": "\ud83c\udf54 Order #1 is ready",
+      "message": "Pick up for Cabana 3 \u2014 2 item(s) on the pass.",
+      "read": false,
+      "ts": "2026-08-03 18:07"
+    },
+    {
+      "id": 1781146895330,
+      "empId": "1781113250677",
+      "poolId": 1781142303038,
+      "title": "\ud83d\udcc5 New Shifts Scheduled",
+      "message": "You've been scheduled for 1 shift (Jun 11).",
+      "read": false,
+      "ts": "2026-06-10 23:01"
+    },
+    {
+      "id": 1781143734487,
+      "empId": "1781113261168",
+      "poolId": 1781142303038,
+      "title": "\ud83d\udce2 Message from Management",
+      "message": "welcome to the app",
+      "read": false,
+      "ts": "2026-06-10 22:08",
+      "from_mgmt": true
+    },
+    {
+      "id": 1781143734486,
+      "empId": "1781113250677",
+      "poolId": 1781142303038,
+      "title": "\ud83d\udce2 Message from Management",
+      "message": "welcome to the app",
+      "read": false,
+      "ts": "2026-06-10 22:08",
+      "from_mgmt": true
+    },
+    {
+      "id": 1781143734485,
+      "empId": "1781111821144",
+      "poolId": 1781142303038,
+      "title": "\ud83d\udce2 Message from Management",
+      "message": "welcome to the app",
+      "read": false,
+      "ts": "2026-06-10 22:08",
+      "from_mgmt": true
+    },
+    {
+      "id": 1781124437997,
+      "empId": "1781111821144",
+      "title": "\ud83d\udcc5 New Shift Added",
+      "message": "You've been scheduled: Wed Jun 10, 5:00 PM \u2013 7:00 PM (Staffer)",
+      "read": false,
+      "ts": "2026-06-10 16:47",
+      "poolId": 1781142303038
+    }
+  ],
+  "pools": [
+    {
+      "id": 1781142303038,
+      "name": "Mar-A-Lavitch Pool",
+      "address": "5826 Osceola Road",
+      "status": "open",
+      "created": "2026-06-10",
+      "tax_rate": 0.0,
+      "square_app_id": "sq0idp-TEST123456789"
+    }
+  ],
+  "breaks": [],
+  "menu": [
+    {
+      "poolId": 1781142303038,
+      "name": "Cheeseburger",
+      "category": "Grill",
+      "price": 850,
+      "id": 1785794844457,
+      "emoji": "",
+      "desc": "",
+      "taxable": true,
+      "active": true
+    },
+    {
+      "poolId": 1781142303038,
+      "name": "Hot Dog",
+      "category": "Grill",
+      "price": 500,
+      "id": 1785794864447,
+      "emoji": "",
+      "desc": "",
+      "taxable": true,
+      "active": true
+    },
+    {
+      "poolId": 1781142303038,
+      "name": "French Fries",
+      "category": "Grill",
+      "price": 400,
+      "id": 1785794864458,
+      "emoji": "",
+      "desc": "",
+      "taxable": true,
+      "active": true
+    },
+    {
+      "poolId": 1781142303038,
+      "name": "Soft Serve Cone",
+      "category": "Ice Cream",
+      "price": 400,
+      "id": 1785794864468,
+      "emoji": "",
+      "desc": "",
+      "taxable": true,
+      "active": true
+    },
+    {
+      "poolId": 1781142303038,
+      "name": "Lemonade",
+      "category": "Drinks",
+      "price": 300,
+      "id": 1785794864477,
+      "emoji": "",
+      "desc": "",
+      "taxable": true,
+      "active": true
+    }
+  ],
+  "layouts": [
+    {
+      "poolId": 1781142303038,
+      "w": 1000,
+      "h": 700,
+      "zones": [],
+      "seats": [
+        {
+          "id": 1785793569592,
+          "label": "A1",
+          "type": "lounger",
+          "x": 330.0,
+          "y": 170.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569667,
+          "label": "A2",
+          "type": "lounger",
+          "x": 380.0,
+          "y": 170.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569668,
+          "label": "A3",
+          "type": "lounger",
+          "x": 430.0,
+          "y": 170.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569622,
+          "label": "A4",
+          "type": "lounger",
+          "x": 480.0,
+          "y": 170.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569630,
+          "label": "A5",
+          "type": "lounger",
+          "x": 520.0,
+          "y": 170.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569632,
+          "label": "A6",
+          "type": "lounger",
+          "x": 570.0,
+          "y": 170.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569696,
+          "label": "A7",
+          "type": "lounger",
+          "x": 620.0,
+          "y": 170.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569634,
+          "label": "A8",
+          "type": "lounger",
+          "x": 670.0,
+          "y": 170.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569625,
+          "label": "A9",
+          "type": "lounger",
+          "x": 330.0,
+          "y": 260.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569660,
+          "label": "A10",
+          "type": "lounger",
+          "x": 380.0,
+          "y": 260.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569607,
+          "label": "A11",
+          "type": "lounger",
+          "x": 430.0,
+          "y": 260.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569675,
+          "label": "A12",
+          "type": "lounger",
+          "x": 480.0,
+          "y": 260.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569640,
+          "label": "A13",
+          "type": "lounger",
+          "x": 520.0,
+          "y": 260.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569642,
+          "label": "A14",
+          "type": "lounger",
+          "x": 570.0,
+          "y": 260.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569667,
+          "label": "A15",
+          "type": "lounger",
+          "x": 620.0,
+          "y": 260.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569675,
+          "label": "A16",
+          "type": "lounger",
+          "x": 670.0,
+          "y": 260.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        },
+        {
+          "id": 1785793569661,
+          "label": "C1",
+          "type": "cabana",
+          "x": 340.0,
+          "y": 520.0,
+          "rot": 0,
+          "cap": 6,
+          "bookable": true
+        },
+        {
+          "id": 1785793569627,
+          "label": "C2",
+          "type": "cabana",
+          "x": 500.0,
+          "y": 520.0,
+          "rot": 0,
+          "cap": 6,
+          "bookable": true
+        },
+        {
+          "id": 1785793569625,
+          "label": "C3",
+          "type": "cabana",
+          "x": 660.0,
+          "y": 520.0,
+          "rot": 0,
+          "cap": 6,
+          "bookable": true
+        },
+        {
+          "id": 1785793569689,
+          "label": "",
+          "type": "umbrella",
+          "x": 500.0,
+          "y": 400.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": false
+        },
+        {
+          "id": 1785794032367,
+          "label": "",
+          "type": "chair",
+          "x": 500.0,
+          "y": 350.0,
+          "rot": 0,
+          "cap": 1,
+          "bookable": true
+        }
+      ]
+    }
+  ],
+  "reservations": [
+    {
+      "id": 1785936387619,
+      "poolId": 1781142303038,
+      "passId": 1785935979821,
+      "seatId": 1785793569630,
+      "seatLabel": "A5",
+      "guestName": "The Ruiz Family",
+      "party": 4,
+      "phone": "(301) 555-0134",
+      "note": "Walk-in, scanned at the gate",
+      "date": "2026-08-05",
+      "start": "09:26",
+      "end": "",
+      "status": "active",
+      "empId": "x",
+      "empName": "Gate",
+      "created": "2026-08-05 09:26",
+      "checkedInAt": "09:26",
+      "checkedOutAt": null,
+      "walkIn": true
+    },
+    {
+      "id": 1785935527064,
+      "poolId": 1781142303038,
+      "passId": 1785935527055,
+      "seatId": 1785793569592,
+      "seatLabel": "A1",
+      "guestName": "The Ruiz Family",
+      "party": 4,
+      "phone": "",
+      "note": "Walk-in, scanned at the gate",
+      "date": "2026-08-05",
+      "start": "09:12",
+      "end": "",
+      "status": "active",
+      "empId": "x",
+      "empName": "Gate staff",
+      "created": "2026-08-05 09:12",
+      "checkedInAt": "09:12",
+      "checkedOutAt": null,
+      "walkIn": true
+    }
+  ],
+  "orders": [
+    {
+      "id": 1785937012577,
+      "poolId": 1781142303038,
+      "seatId": 1785793569667,
+      "seatLabel": "A2",
+      "guestName": "The Ruiz Family",
+      "items": [
+        {
+          "menuId": 1785794864458,
+          "name": "French Fries",
+          "price": 400,
+          "qty": 1,
+          "note": "",
+          "total": 400
+        }
+      ],
+      "subtotal": 400,
+      "taxRate": 0.0,
+      "tax": 0,
+      "tip": 0,
+      "total": 400,
+      "payment": "",
+      "account": "",
+      "compReason": "",
+      "cashTendered": 0,
+      "changeDue": 0,
+      "settled": false,
+      "status": "open",
+      "empId": "",
+      "empName": "Guest order",
+      "created": "2026-08-05 09:36",
+      "date": "2026-08-05",
+      "paidAt": null,
+      "num": 1,
+      "kitchen": "new",
+      "createdTs": 1785937012577,
+      "startedTs": null,
+      "readyTs": null,
+      "servedTs": null,
+      "kitchenNote": "",
+      "source": "guest",
+      "guestToken": "1LAPYyIcNceprhnXo3yziA",
+      "guestContact": "(301) 555-0134"
+    },
+    {
+      "id": 1785814121118,
+      "poolId": 1781142303038,
+      "seatId": null,
+      "seatLabel": "",
+      "guestName": "",
+      "items": [
+        {
+          "menuId": 1785794844457,
+          "name": "Cheeseburger",
+          "price": 850,
+          "qty": 1,
+          "note": "",
+          "mods": [],
+          "total": 850
+        }
+      ],
+      "subtotal": 850,
+      "taxRate": 0.0,
+      "tax": 0,
+      "tip": 0,
+      "total": 850,
+      "payment": "cash",
+      "account": "",
+      "compReason": "",
+      "cashTendered": 0,
+      "changeDue": 0,
+      "settled": true,
+      "status": "paid",
+      "empId": "1781113250677",
+      "empName": "John Doe",
+      "created": "2026-08-03 23:28",
+      "date": "2026-08-03",
+      "paidAt": "23:28",
+      "num": 9,
+      "kitchen": "new",
+      "createdTs": 1785814121119,
+      "startedTs": null,
+      "readyTs": null,
+      "servedTs": null,
+      "kitchenNote": ""
+    },
+    {
+      "id": 1785811793256,
+      "poolId": 1781142303038,
+      "seatId": null,
+      "seatLabel": "Cabana 4",
+      "guestName": "",
+      "items": [
+        {
+          "menuId": 1785794844457,
+          "name": "Cheeseburger",
+          "price": 850,
+          "qty": 1,
+          "note": "",
+          "mods": [],
+          "total": 850
+        }
+      ],
+      "subtotal": 850,
+      "taxRate": 0.0,
+      "tax": 0,
+      "tip": 0,
+      "total": 850,
+      "payment": "card",
+      "account": "",
+      "compReason": "",
+      "cashTendered": 0,
+      "changeDue": 0,
+      "settled": true,
+      "status": "open",
+      "empId": "1781113250677",
+      "empName": "John Doe",
+      "created": "2026-08-03 22:49",
+      "date": "2026-08-03",
+      "paidAt": null,
+      "num": 8,
+      "kitchen": "new",
+      "createdTs": 1785811793256,
+      "startedTs": null,
+      "readyTs": null,
+      "servedTs": null,
+      "kitchenNote": ""
+    },
+    {
+      "id": 1785811757609,
+      "poolId": 1781142303038,
+      "seatId": null,
+      "seatLabel": "Lounger 4",
+      "guestName": "",
+      "items": [
+        {
+          "menuId": 1785794864477,
+          "name": "Lemonade",
+          "price": 300,
+          "qty": 2,
+          "note": "",
+          "mods": [
+            "No ice"
+          ],
+          "total": 600
+        }
+      ],
+      "subtotal": 600,
+      "taxRate": 0.0,
+      "tax": 0,
+      "tip": 0,
+      "total": 600,
+      "payment": "card",
+      "account": "",
+      "compReason": "",
+      "cashTendered": 0,
+      "changeDue": 0,
+      "settled": true,
+      "status": "paid",
+      "empId": "1781113250677",
+      "empName": "John Doe",
+      "created": "2026-08-03 22:49",
+      "date": "2026-08-03",
+      "paidAt": "22:49",
+      "num": 7,
+      "kitchen": "new",
+      "createdTs": 1785811757609,
+      "startedTs": null,
+      "readyTs": null,
+      "servedTs": null,
+      "kitchenNote": "",
+      "squareTransactionId": "SQ-TXN-9f2a",
+      "squareClientTransactionId": "CLIENT-88b1"
+    },
+    {
+      "id": 1785810549032,
+      "poolId": 1781142303038,
+      "seatId": null,
+      "seatLabel": "Test",
+      "guestName": "",
+      "items": [
+        {
+          "menuId": 1785794864477,
+          "name": "Lemonade",
+          "price": 300,
+          "qty": 1,
+          "note": "",
+          "mods": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "No ice",
+            "pad",
+            "pad",
+            "pad",
+            "pad",
+            "pad",
+            "pad"
+          ],
+          "total": 300
+        }
+      ],
+      "subtotal": 300,
+      "taxRate": 0.0,
+      "tax": 0,
+      "tip": 0,
+      "total": 300,
+      "payment": "cash",
+      "account": "",
+      "compReason": "",
+      "cashTendered": 0,
+      "changeDue": 0,
+      "settled": true,
+      "status": "paid",
+      "empId": "1781113250677",
+      "empName": "John Doe",
+      "created": "2026-08-03 22:29",
+      "date": "2026-08-03",
+      "paidAt": "22:29",
+      "num": 6,
+      "kitchen": "new",
+      "createdTs": 1785810549032,
+      "startedTs": null,
+      "readyTs": null,
+      "servedTs": null,
+      "kitchenNote": ""
+    },
+    {
+      "id": 1785810549025,
+      "poolId": 1781142303038,
+      "seatId": null,
+      "seatLabel": "Cabana 2",
+      "guestName": "",
+      "items": [
+        {
+          "menuId": 1785794864477,
+          "name": "Lemonade",
+          "price": 300,
+          "qty": 2,
+          "note": "in a to-go cup",
+          "mods": [
+            "No ice",
+            "Extra lemon"
+          ],
+          "total": 600
+        },
+        {
+          "menuId": 1785794864477,
+          "name": "Lemonade",
+          "price": 300,
+          "qty": 1,
+          "note": "",
+          "mods": [],
+          "total": 300
+        }
+      ],
+      "subtotal": 900,
+      "taxRate": 0.0,
+      "tax": 0,
+      "tip": 0,
+      "total": 900,
+      "payment": "cash",
+      "account": "",
+      "compReason": "",
+      "cashTendered": 0,
+      "changeDue": 0,
+      "settled": true,
+      "status": "open",
+      "empId": "1781113250677",
+      "empName": "John Doe",
+      "created": "2026-08-03 22:29",
+      "date": "2026-08-03",
+      "paidAt": null,
+      "num": 5,
+      "kitchen": "new",
+      "createdTs": 1785810549026,
+      "startedTs": null,
+      "readyTs": null,
+      "servedTs": null,
+      "kitchenNote": ""
+    },
+    {
+      "id": 1785810511663,
+      "poolId": 1781142303038,
+      "seatId": null,
+      "seatLabel": "Cabana 2",
+      "guestName": "",
+      "items": [
+        {
+          "menuId": 1785794864477,
+          "name": "Lemonade",
+          "price": 300,
+          "qty": 2,
+          "note": "in a to-go cup",
+          "total": 600
+        },
+        {
+          "menuId": 1785794864477,
+          "name": "Lemonade",
+          "price": 300,
+          "qty": 1,
+          "note": "",
+          "total": 300
+        }
+      ],
+      "subtotal": 900,
+      "taxRate": 0.0,
+      "tax": 0,
+      "tip": 0,
+      "total": 900,
+      "payment": "cash",
+      "account": "",
+      "compReason": "",
+      "cashTendered": 0,
+      "changeDue": 0,
+      "settled": true,
+      "status": "open",
+      "empId": "1781113250677",
+      "empName": "John Doe",
+      "created": "2026-08-03 22:28",
+      "date": "2026-08-03",
+      "paidAt": null,
+      "num": 4,
+      "kitchen": "new",
+      "createdTs": 1785810511663,
+      "startedTs": null,
+      "readyTs": null,
+      "servedTs": null,
+      "kitchenNote": ""
+    },
+    {
+      "id": 1785794891224,
+      "poolId": 1781142303038,
+      "seatId": null,
+      "seatLabel": "Cabana 1",
+      "guestName": "",
+      "items": [
+        {
+          "menuId": 1785794864468,
+          "name": "Soft Serve Cone",
+          "price": 400,
+          "qty": 3,
+          "note": "",
+          "total": 1200
+        },
+        {
+          "menuId": 1785794864477,
+          "name": "Lemonade",
+          "price": 300,
+          "qty": 2,
+          "note": "",
+          "total": 600
+        }
+      ],
+      "subtotal": 1800,
+      "taxRate": 0.0,
+      "tax": 0,
+      "tip": 0,
+      "total": 1800,
+      "payment": "cash",
+      "account": "",
+      "compReason": "",
+      "cashTendered": 0,
+      "changeDue": 0,
+      "settled": true,
+      "status": "open",
+      "empId": "1781113250677",
+      "empName": "John Doe",
+      "created": "2026-08-03 18:08",
+      "date": "2026-08-03",
+      "paidAt": null,
+      "num": 3,
+      "kitchen": "new",
+      "createdTs": 1785794891224,
+      "startedTs": null,
+      "readyTs": null,
+      "servedTs": null,
+      "kitchenNote": "Rush \u2014 guest leaving at 4"
+    },
+    {
+      "id": 1785794891221,
+      "poolId": 1781142303038,
+      "seatId": null,
+      "seatLabel": "Lounger 12",
+      "guestName": "Patel",
+      "items": [
+        {
+          "menuId": 1785794864447,
+          "name": "Hot Dog",
+          "price": 500,
+          "qty": 2,
+          "note": "extra ketchup",
+          "total": 1000
+        },
+        {
+          "menuId": 1785794864458,
+          "name": "French Fries",
+          "price": 400,
+          "qty": 1,
+          "note": "",
+          "total": 400
+        }
+      ],
+      "subtotal": 1400,
+      "taxRate": 0.0,
+      "tax": 0,
+      "tip": 0,
+      "total": 1400,
+      "payment": "cash",
+      "account": "",
+      "compReason": "",
+      "cashTendered": 2000,
+      "changeDue": 600,
+      "settled": true,
+      "status": "paid",
+      "empId": "1781113261168",
+      "empName": "Charlie Edlavitch",
+      "created": "2026-08-03 18:08",
+      "date": "2026-08-03",
+      "paidAt": "18:08",
+      "num": 2,
+      "kitchen": "new",
+      "createdTs": 1785794891221,
+      "startedTs": null,
+      "readyTs": null,
+      "servedTs": null,
+      "kitchenNote": ""
+    },
+    {
+      "id": 1785794844526,
+      "poolId": 1781142303038,
+      "seatId": 9,
+      "seatLabel": "Cabana 3",
+      "guestName": "Ruiz",
+      "items": [
+        {
+          "menuId": 1785794844457,
+          "name": "Cheeseburger",
+          "price": 850,
+          "qty": 2,
+          "note": "no pickles",
+          "total": 1700
+        }
+      ],
+      "subtotal": 1700,
+      "taxRate": 0.0,
+      "tax": 0,
+      "tip": 200,
+      "total": 1900,
+      "payment": "cash",
+      "account": "",
+      "compReason": "",
+      "cashTendered": 2500,
+      "changeDue": 600,
+      "settled": true,
+      "status": "paid",
+      "empId": "1781113250677",
+      "empName": "John Doe",
+      "created": "2026-08-03 18:07",
+      "date": "2026-08-03",
+      "paidAt": "18:07",
+      "num": 1,
+      "kitchen": "served",
+      "createdTs": 1785794844526,
+      "startedTs": 1785794844596,
+      "readyTs": 1785794844605,
+      "servedTs": 1785795014663,
+      "kitchenNote": "Nut allergy",
+      "bumpedBy": "John Doe"
+    }
+  ],
+  "waitlist": [],
+  "kds_devices": [],
+  "passes": [
+    {
+      "id": 1785935527055,
+      "poolId": 1781142303038,
+      "code": "Wzoqj7nkU6CF",
+      "name": "The Ruiz Family",
+      "kind": "member",
+      "memberNo": "214",
+      "party": 4,
+      "phone": "",
+      "active": true,
+      "created": "2026-08-05 09:12",
+      "lastScan": "2026-08-05 09:12"
+    },
+    {
+      "id": 1785935979821,
+      "poolId": 1781142303038,
+      "code": "3OspCk3cIVI0",
+      "name": "The Ruiz Family",
+      "kind": "member",
+      "memberNo": "214",
+      "party": 4,
+      "phone": "(301) 555-0134",
+      "active": true,
+      "created": "2026-08-05 09:19",
+      "lastScan": "2026-08-05 09:26"
+    },
+    {
+      "id": 1785936794056,
+      "poolId": 1781142303038,
+      "code": "g1YWZ-Q2rp-B",
+      "name": "SAVE TEST",
+      "kind": "guest",
+      "memberNo": "",
+      "party": 1,
+      "phone": "",
+      "active": true,
+      "created": "2026-08-05 09:33",
+      "lastScan": null
+    },
+    {
+      "id": 1785937191296,
+      "poolId": 1781142303038,
+      "code": "GvoxmOFP4njj",
+      "name": "Backup Test Guest",
+      "kind": "guest",
+      "memberNo": "",
+      "party": 1,
+      "phone": "",
+      "active": true,
+      "created": "2026-08-05 09:39",
+      "lastScan": null
+    },
+    {
+      "id": 1785937223824,
+      "poolId": 1781142303038,
+      "code": "DezAyw7B0_yE",
+      "name": "Collision Test",
+      "kind": "guest",
+      "memberNo": "",
+      "party": 1,
+      "phone": "",
+      "active": true,
+      "created": "2026-08-05 09:40",
+      "lastScan": null
+    }
+  ]
+}

@@ -623,6 +623,26 @@
     <h2>All Pools</h2>
     <div id="pools-list"></div>
   </div>
+
+  <div class="card">
+    <h2>Backups
+      <button class="btn btn-sm btn-primary" style="float:right" onclick="backupNow()">Back up now</button>
+    </h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+      A snapshot is taken every hour, and only when something has changed. Every one from
+      the last two days is kept, then one a day for a month.
+      <b>They sit on the same disk as the live data</b>, so they undo a bad edit or a
+      deletion — they do not survive losing the disk. Download one now and then and keep
+      it somewhere else.
+    </p>
+    <div id="backup-warn"></div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Taken</th><th>Size</th><th></th></tr></thead>
+        <tbody id="backup-table"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- MENU -->
@@ -1035,7 +1055,7 @@ function showPage(name, btn) {
   if (name==='employees') renderEmployees();
   if (name==='reports') renderReports();
   if (name==='board') renderBoard();
-  if (name==='pools') renderPools();
+  if (name==='pools') { renderPools(); renderBackups(); }
   if (name==='menu') renderMenu();
   if (name==='layout') renderLayout();
   if (name==='sales') renderSales();
@@ -2342,6 +2362,39 @@ async function voidKitchenOrder(id, num) {
   if (!confirm(`Void order #${num}? It comes off the kitchen board and stops being billed.`)) return;
   await api.post('/api/order/void', {id, reason: 'Voided by management'});
   renderKitchen();
+}
+
+// ── Backups ────────────────────────────────────────────────────────────────
+async function renderBackups() {
+  const tbody = document.getElementById('backup-table');
+  if (!tbody) return;
+  let d;
+  try { d = await (await fetch('/api/backups')).json(); }
+  catch (e) { tbody.innerHTML = '<tr><td colspan="3" class="empty">Could not read backups.</td></tr>'; return; }
+  if (!d.ok) { tbody.innerHTML = `<tr><td colspan="3" class="empty">${escK(d.error || 'Unavailable')}</td></tr>`; return; }
+
+  document.getElementById('backup-warn').innerHTML = d.ephemeral
+    ? `<div style="background:#fee2e2;color:#991b1b;border-radius:8px;padding:11px 13px;
+         font-size:.84rem;font-weight:700;margin-bottom:12px">
+         ⚠️ These backups are on the same temporary disk as the data, so a deploy erases
+         them too. Attach a volume first — then they mean something.</div>` : '';
+
+  const kb = n => (n / 1024).toFixed(1) + ' KB';
+  tbody.innerHTML = (d.backups || []).length ? d.backups.map(b => `
+    <tr>
+      <td>${escK(b.taken)}</td>
+      <td>${kb(b.size)}</td>
+      <td><a class="btn btn-sm btn-primary" style="text-decoration:none"
+             href="/api/backup/download?name=${encodeURIComponent(b.name)}">Download</a></td>
+    </tr>`).join('')
+    : '<tr><td colspan="3" class="empty">No snapshots yet — the first is taken within the hour.</td></tr>';
+}
+
+async function backupNow() {
+  const res = await api.post('/api/backup', {});
+  if (!res.ok) return alert(res.error || 'Could not take a backup.');
+  await renderBackups();
+  alert(res.name ? `Snapshot taken: ${res.name}` : 'Nothing has changed since the last snapshot.');
 }
 
 // ── Storage warning ────────────────────────────────────────────────────────

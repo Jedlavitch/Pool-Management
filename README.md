@@ -95,3 +95,15 @@ Once real managers have passwords, remove `ADMIN_PASSWORD` to close the bootstra
 [`pour-decisions/`](pour-decisions/) — a separate side project: a voice-driven cocktail
 coach that watches the glass through the camera and counts your pour. It has
 [its own README](pour-decisions/README.md).
+
+### Backups
+
+A snapshot of `data.json` is written to `$DATA_DIR/backups/` every hour, and only when
+something has changed. Every snapshot from the last two days is kept, then one a day for
+a month. Managers can take one on demand and download any of them from the Pools page.
+
+They live on the same volume as the live data, which is the limit of what they protect:
+a bad edit or a deletion, not the loss of the disk. Download one off the box periodically.
+
+To restore, stop the app, replace `$DATA_DIR/data.json` with a downloaded snapshot, and
+start it again.

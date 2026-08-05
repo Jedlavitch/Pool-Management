@@ -161,7 +161,8 @@ MANAGEMENT_API = (
     '/api/shifts/bulk', '/api/menu', '/api/menu/update', '/api/menu/delete',
     '/api/menu/bulk', '/api/layout', '/api/notification/send',
     '/api/order/void', '/api/order/delete', '/api/order/settle',
-    '/api/pass', '/api/pass/delete',
+    '/api/pass', '/api/pass/delete', '/api/backup', '/api/backups',
+    '/api/backup/download',
     '/api/kds-token', '/api/kds-token/revoke',
 )
 
@@ -212,6 +213,99 @@ def get_local_ip():
     except Exception:
         pass
     return '127.0.0.1'
+
+# ── Backups ─────────────────────────────────────────────────────────────────
+# The whole club is one JSON file. A snapshot every hour costs a few kilobytes
+# and turns "someone deleted the roster" from a catastrophe into a five-minute
+# restore. It lives on the same volume as the data, which is the honest limit
+# of it: this protects against bad writes and human error, not against losing
+# the disk. For that, download a copy off the box now and then.
+BACKUP_DIR = os.path.join(DATA_DIR, 'backups')
+BACKUP_EVERY_SECONDS = 3600
+BACKUP_KEEP_HOURLY = 48      # every snapshot from the last two days
+BACKUP_KEEP_DAILY = 30       # then one a day for a month
+BACKUP_NAME_RE = re.compile(r'^data-\d{8}-\d{6}(-\d+)?\.json$')
+
+def _file_digest(path):
+    try:
+        with open(path, 'rb') as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return None
+
+def list_backups():
+    """Newest first."""
+    try:
+        names = [n for n in os.listdir(BACKUP_DIR) if BACKUP_NAME_RE.match(n)]
+    except OSError:
+        return []
+    out = []
+    for n in sorted(names, reverse=True):
+        try:
+            out.append({'name': n, 'size': os.path.getsize(os.path.join(BACKUP_DIR, n)),
+                        'taken': f'{n[5:9]}-{n[9:11]}-{n[11:13]} {n[14:16]}:{n[16:18]}'})
+        except OSError:
+            pass
+    return out
+
+def prune_backups():
+    """Keep every snapshot from the last two days, then one per day for a month."""
+    kept_days, daily_kept = set(), 0
+    for i, b in enumerate(list_backups()):
+        day = b['name'][5:13]
+        if i < BACKUP_KEEP_HOURLY:
+            kept_days.add(day)
+            continue
+        # Past the hourly window, keep the newest snapshot of each day until the
+        # daily allowance runs out. Counting distinct days, not files, is the
+        # point — an idle week must not use up the month.
+        if day not in kept_days and daily_kept < BACKUP_KEEP_DAILY:
+            kept_days.add(day)
+            daily_kept += 1
+            continue
+        try:
+            os.remove(os.path.join(BACKUP_DIR, b['name']))
+        except OSError:
+            pass
+
+def make_backup(force=False):
+    """Snapshot data.json. Skips when nothing changed, so an idle night doesn't
+    push a day of real history out of the retention window."""
+    if not os.path.exists(DATA_FILE):
+        return None
+    with _DATA_LOCK:
+        digest = _file_digest(DATA_FILE)
+        if digest is None:
+            return None
+        newest = list_backups()[:1]
+        if not force and newest:
+            if _file_digest(os.path.join(BACKUP_DIR, newest[0]['name'])) == digest:
+                return None
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        name, n = f'data-{stamp}.json', 1
+        # Two snapshots in the same second would otherwise silently overwrite
+        # each other — easy to do with the "Back up now" button.
+        while os.path.exists(os.path.join(BACKUP_DIR, name)):
+            n += 1
+            name = f'data-{stamp}-{n}.json'
+        dest = os.path.join(BACKUP_DIR, name)
+        with open(DATA_FILE, 'rb') as src, open(dest, 'wb') as out:
+            out.write(src.read())
+    prune_backups()
+    return name
+
+def backup_loop():
+    while True:
+        time.sleep(BACKUP_EVERY_SECONDS)
+        try:
+            name = make_backup()
+            if name:
+                print(f'[backup] {name}', flush=True)
+        except Exception:
+            # A failed snapshot must never take the pool app down with it.
+            import traceback
+            traceback.print_exc()
 
 def storage_warning():
     """Non-empty when this deploy will lose its data on the next restart.
@@ -796,6 +890,27 @@ class Handler(BaseHTTPRequestHandler):
                                        'start': res.get('start', ''),
                                        'status': res.get('status')} if res else None),
                             'wallet': PKPASS_READY})
+        elif p == '/api/backups':
+            self.send_json({'ok': True, 'backups': list_backups()[:60],
+                            'dir': BACKUP_DIR, 'ephemeral': bool(STORAGE_WARNING)})
+        elif p == '/api/backup/download':
+            # The filename is attacker-controlled in principle, so it is matched
+            # against the exact pattern the writer uses rather than merely
+            # cleaned — no traversal, no reading anything else off the volume.
+            name = parse_qs(urlparse(self.path).query).get('name', [''])[0]
+            if not BACKUP_NAME_RE.match(name):
+                self.send_json({'ok': False, 'error': 'Unknown backup'}, 400); return
+            full = os.path.join(BACKUP_DIR, name)
+            if not os.path.exists(full):
+                self.send_json({'ok': False, 'error': 'Unknown backup'}, 404); return
+            with open(full, 'rb') as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Disposition', f'attachment; filename="{name}"')
+            self.send_header('Content-Length', len(body))
+            self.end_headers()
+            self.wfile.write(body)
         elif p in ('/kds', '/kds.html', '/kitchen'):
             serve_file(self, 'kds.html')
         elif p in ('/print-qr', '/print-qr.html'):
@@ -1554,6 +1669,10 @@ class Handler(BaseHTTPRequestHandler):
             save_data(data)
             self.send_json({'ok': True, 'pass': rec})
 
+        elif p == '/api/backup':
+            name = make_backup(force=True)
+            self.send_json({'ok': True, 'name': name, 'backups': list_backups()[:20]})
+
         elif p == '/api/pass/delete':
             data['passes'] = [x for x in data.get('passes', []) if x['id'] != body.get('id')]
             save_data(data)
@@ -2041,6 +2160,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({'error': 'not found'}, 404)
 
 if __name__ == '__main__':
+    try:
+        first = make_backup()
+        print(f'[backup] startup snapshot: {first or "already current"}', flush=True)
+    except Exception:
+        pass
+    threading.Thread(target=backup_loop, daemon=True).start()
     if STORAGE_WARNING:
         print('=' * 72)
         print('!!  DATA WILL NOT SURVIVE THE NEXT DEPLOY')
