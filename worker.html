@@ -778,6 +778,7 @@ select.form-inp{cursor:pointer;}
   font-size:.78rem;font-weight:700;margin-bottom:12px;}
 </style>
 <script src="pos-shared.js"></script>
+<script src="jsQR.js"></script>
 </head>
 <body>
 
@@ -1643,31 +1644,48 @@ async function startScan() {
   document.getElementById('scan-result').innerHTML = '';
   document.getElementById('scan-stage').style.display = '';
   document.getElementById('scan-manual').value = '';
+  document.querySelector('#screen-scan .scan-frame').style.display = '';
   const hint = document.getElementById('scan-hint');
+  hint.textContent = "Point the camera at the guest's QR code.";
 
-  // BarcodeDetector is missing on iOS Safari, so the typed code is a first-class
-  // path here, not a token fallback — the pass shows the code under the QR.
-  if (!('BarcodeDetector' in window)) {
-    hint.textContent = "This phone can't scan in the browser — type the code printed under the guest's QR instead.";
-    document.querySelector('#screen-scan .scan-frame').style.display = 'none';
-    document.getElementById('scan-manual').focus();
-    return;
-  }
   try {
     scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     const v = document.getElementById('scan-video');
-    v.srcObject = scanStream; await v.play();
-    const det = new BarcodeDetector({ formats: ['qr_code'] });
+    v.srcObject = scanStream;
+    v.setAttribute('playsinline', '');   // iOS refuses to inline-play without it
+    await v.play();
+
+    // BarcodeDetector is hardware-accelerated where it exists (Android, desktop
+    // Chrome). iOS Safari has never shipped it, which is the phone most staff
+    // actually carry — so jsQR decodes frames there instead. Same loop, same
+    // callback; only the decoder differs.
+    const native = ('BarcodeDetector' in window)
+      ? new BarcodeDetector({ formats: ['qr_code'] }) : null;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
     scanLoop = setInterval(async () => {
       if (scanBusy || v.readyState < 2) return;
       try {
-        const found = await det.detect(v);
-        if (found.length) { scanBusy = true; lookupCode(found[0].rawValue); }
+        if (native) {
+          const found = await native.detect(v);
+          if (found.length) { scanBusy = true; lookupCode(found[0].rawValue); }
+          return;
+        }
+        // Downscale before decoding: a full 1080p frame every 350ms burns
+        // battery for no extra accuracy on a QR held at arm's length.
+        const w = 480, h = Math.round(v.videoHeight * (480 / v.videoWidth)) || 480;
+        canvas.width = w; canvas.height = h;
+        ctx.drawImage(v, 0, 0, w, h);
+        const img = ctx.getImageData(0, 0, w, h);
+        const hit = jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
+        if (hit && hit.data) { scanBusy = true; lookupCode(hit.data); }
       } catch (e) { /* a dropped frame is not a failure */ }
     }, 350);
   } catch (e) {
-    hint.textContent = 'No camera access — type the code from the guest\'s pass instead.';
+    hint.textContent = "No camera access — type the code from the guest's pass instead.";
     document.querySelector('#screen-scan .scan-frame').style.display = 'none';
+    document.getElementById('scan-manual').focus();
   }
 }
 

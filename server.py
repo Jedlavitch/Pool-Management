@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os, socket, threading, hashlib, hmac, base64, secrets, time
+import json, os, re, socket, threading, hashlib, hmac, base64, secrets, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime
@@ -141,7 +141,7 @@ MANAGEMENT_ROLES = ('Pool Owner', 'Owner', 'Manager', 'Staffer')
 
 # Reachable without a session: the sign-in screen needs the name list, and the
 # login call itself obviously can't require being logged in.
-PUBLIC_API = ('/api/roster', '/api/auth', '/api/logout',
+PUBLIC_API = ('/api/roster', '/api/auth', '/api/logout', '/api/guest/signin',
               # Guests ordering from a lounger have no staff login and never will.
               # These four are the entire surface they can reach, and each one
               # hands back only what a person holding a chair's QR code should
@@ -739,6 +739,8 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
         elif p in ('/worker', '/worker.html', '/maralavitchstaff'):
             serve_file(self, 'worker.html')
+        elif p in ('/mypass', '/mypass.html', '/mypool'):
+            serve_file(self, 'mypass.html')
         elif p in ('/pass', '/pass.html'):
             # The guest's own page. No session: the code in the URL is the whole
             # credential, and it only ever renders a name and a QR.
@@ -1466,6 +1468,31 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({'ok': True, 'layout': layout})
 
         # ── Chair reservations ──────────────────────────────────────────────
+        elif p == '/api/guest/signin':
+            # A guest signing in to see their own pass. Deliberately not a
+            # password: a household will not remember one, and there is nothing
+            # here worth protecting with one — the pass itself is the credential
+            # and this only hands back the one already posted to them.
+            #
+            # Matching needs both the phone and the surname so a wrong number
+            # typed by a stranger cannot walk into someone else's pass, and the
+            # refusal is identical either way so it can't be used to probe which
+            # numbers belong to members.
+            phone = re.sub(r'\D', '', body.get('phone') or '')[-10:]
+            surname = (body.get('surname') or '').strip().lower()
+            if len(phone) < 10 or not surname:
+                self.send_json({'ok': False, 'error': 'Enter the phone number and surname on your membership.'}, 400); return
+            hit = None
+            for x in data.get('passes', []):
+                if not x.get('active', True):
+                    continue
+                on_file = re.sub(r'\D', '', x.get('phone') or '')[-10:]
+                if on_file and on_file == phone and surname in (x.get('name') or '').lower():
+                    hit = x; break
+            if not hit:
+                self.send_json({'ok': False, 'error': "We couldn't match that. Check with the front desk — they can text your pass again."}, 404); return
+            self.send_json({'ok': True, 'code': hit['code'], 'name': hit['name']})
+
         # ── Guest passes (QR at the gate) ──────────────────────────────────
         elif p == '/api/pass':
             # One durable pass per household. The code is the whole credential,

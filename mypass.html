@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#023e8a"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>My Pool Pass</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{
+  font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+  background:#0d1117;color:#e6edf6;min-height:100vh;
+  display:flex;align-items:center;justify-content:center;padding:22px;
+  -webkit-font-smoothing:antialiased;letter-spacing:-.011em;
+}
+.wrap{width:min(400px,94vw);}
+.brand{text-align:center;font-size:1.55rem;font-weight:800;letter-spacing:-.03em;margin-bottom:6px;}
+.tag{text-align:center;font-size:.88rem;color:#8b98ab;margin-bottom:26px;line-height:1.5;}
+.card{background:#161b22;border:1px solid #232c3a;border-radius:18px;padding:22px;}
+label{display:block;font-size:.68rem;font-weight:800;text-transform:uppercase;
+  letter-spacing:.1em;color:#8b98ab;margin:0 0 6px;}
+input{
+  width:100%;padding:14px;font-size:1rem;border-radius:11px;margin-bottom:16px;
+  background:#0d1117;color:#e6edf6;border:1.5px solid #2c3746;font-family:inherit;
+}
+input:focus{outline:none;border-color:#3b82f6;}
+button{
+  width:100%;padding:15px;border:none;border-radius:11px;background:#2563eb;color:#fff;
+  font-size:.98rem;font-weight:800;cursor:pointer;font-family:inherit;
+}
+button:disabled{background:#2c3746;color:#8b98ab;cursor:not-allowed;}
+.err{color:#f87171;font-size:.85rem;font-weight:700;margin-bottom:12px;min-height:20px;line-height:1.4;}
+.foot{text-align:center;font-size:.79rem;color:#6b7787;margin-top:18px;line-height:1.6;}
+.foot a{color:#7aa7e8;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">🏊 My Pool Pass</div>
+  <p class="tag">Sign in to pull up your pass. Show it at the gate and staff will
+     check you in and mark your chair.</p>
+  <div class="card">
+    <div class="err" id="err"></div>
+    <label for="phone">Phone number on your membership</label>
+    <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(301) 555-0134"
+      onkeydown="if(event.key==='Enter')document.getElementById('surname').focus()"/>
+    <label for="surname">Surname</label>
+    <input id="surname" type="text" autocomplete="family-name" placeholder="Ruiz"
+      onkeydown="if(event.key==='Enter')signIn()"/>
+    <button id="go" onclick="signIn()">Show my pass</button>
+  </div>
+  <p class="foot">Can't get in? The front desk can send your pass again.<br/>
+     Hungry? <a href="/order">Order to your chair</a>.</p>
+</div>
+
+<script>
+// A remembered pass skips this page entirely next time — a family shouldn't
+// have to sign in every Saturday. ?switch= forces the form back.
+const saved = localStorage.getItem('pool_pass_code');
+if (saved && !new URLSearchParams(location.search).has('switch')) {
+  location.replace('/pass?c=' + encodeURIComponent(saved));
+}
+
+async function signIn() {
+  const btn = document.getElementById('go');
+  const err = document.getElementById('err');
+  err.textContent = '';
+  const phone = document.getElementById('phone').value.trim();
+  const surname = document.getElementById('surname').value.trim();
+  if (!phone || !surname) { err.textContent = 'Enter both your phone number and surname.'; return; }
+  btn.disabled = true; btn.textContent = 'Checking…';
+  try {
+    const res = await (await fetch('/api/guest/signin', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ phone, surname }),
+    })).json();
+    if (!res.ok) { err.textContent = res.error || "We couldn't match that."; return; }
+    localStorage.setItem('pool_pass_code', res.code);
+    location.href = '/pass?c=' + encodeURIComponent(res.code);
+  } catch (e) {
+    err.textContent = "Can't reach the pool right now — try again in a moment.";
+  } finally {
+    btn.disabled = false; btn.textContent = 'Show my pass';
+  }
+}
+</script>
+</body>
+</html>
