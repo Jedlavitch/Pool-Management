@@ -190,6 +190,7 @@
   <button onclick="showPage('layout',this)">🪑 Layout</button>
   <button onclick="showPage('sales',this)">💰 Sales</button>
   <button onclick="showPage('kitchen',this)">🍳 Kitchen</button>
+  <button onclick="showPage('passes',this)">🎟️ Passes</button>
   <button onclick="showPage('reports',this)">Reports</button>
   <button onclick="showPage('pools',this)">🏊 Pools</button>
 </nav>
@@ -817,6 +818,39 @@
   </div>
 </div>
 
+<!-- PASSES -->
+<div class="page" id="page-passes">
+  <div class="card">
+    <h2>Issue a Pass</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">
+      Each pass is a QR the guest keeps — on their phone, in Apple Wallet, or printed.
+      Staff scan it at the gate to check them in and mark their chair. It works the same
+      whether they booked ahead or just turned up.</p>
+    <div class="form-row">
+      <div class="form-group" style="flex:2"><label>Name</label>
+        <input type="text" id="pass-name" placeholder="e.g. The Ruiz family" /></div>
+      <div class="form-group"><label>Type</label>
+        <select id="pass-kind"><option value="member">Member</option><option value="guest">Guest</option></select></div>
+      <div class="form-group"><label>Member No.</label>
+        <input type="text" id="pass-no" placeholder="optional" /></div>
+      <div class="form-group"><label>Party size</label>
+        <input type="number" id="pass-party" value="1" min="1" max="20" /></div>
+      <div class="form-group" style="flex:0"><label>&nbsp;</label>
+        <button class="btn btn-primary" onclick="issuePass()">Issue</button></div>
+    </div>
+    <div id="pass-new"></div>
+  </div>
+  <div class="card">
+    <h2>Passes <button class="btn btn-sm btn-primary" style="float:right" onclick="renderPasses()">↻ Refresh</button></h2>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Name</th><th>Type</th><th>Party</th><th>Last scanned</th><th>Pass link</th><th></th></tr></thead>
+        <tbody id="pass-table"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- SALES -->
 <div class="page" id="page-sales">
   <div class="card">
@@ -939,7 +973,7 @@ function rerenderActive() {
   ({ chemicals:renderChemicals, schedule:renderSchedule, timeclock:renderTimeclock,
      employees:renderEmployees, board:renderBoard, reports:renderReports, pools:renderPools,
      menu:renderMenu, layout:renderLayout, sales:renderSales,
-     kitchen:renderKitchen }[name] || (()=>{}))();
+     kitchen:renderKitchen, passes:renderPasses }[name] || (()=>{}))();
 }
 function switchPool(id) {
   if (mgrDirty && !confirm('You have unsaved deck-layout changes for the current pool. Switch anyway and lose them?')) {
@@ -1006,6 +1040,7 @@ function showPage(name, btn) {
   if (name==='layout') renderLayout();
   if (name==='sales') renderSales();
   if (name==='kitchen') renderKitchen();
+  if (name==='passes') renderPasses();
 }
 
 // Tickets move on their own while a manager watches — keep the board honest.
@@ -2307,6 +2342,52 @@ async function voidKitchenOrder(id, num) {
   if (!confirm(`Void order #${num}? It comes off the kitchen board and stops being billed.`)) return;
   await api.post('/api/order/void', {id, reason: 'Voided by management'});
   renderKitchen();
+}
+
+// ── Guest passes ───────────────────────────────────────────────────────────
+const passUrl = code => `${location.origin}/pass?c=${encodeURIComponent(code)}`;
+
+function renderPasses() {
+  const rows = (DB.passes || []).filter(inPool);
+  document.getElementById('pass-table').innerHTML = rows.length ? rows.map(p => `
+    <tr>
+      <td><b>${escK(p.name)}</b>${p.memberNo ? `<div style="font-size:.72rem;color:var(--muted)">No. ${escK(p.memberNo)}</div>` : ''}</td>
+      <td>${p.kind === 'guest' ? 'Guest' : 'Member'}</td>
+      <td>${p.party || 1}</td>
+      <td>${p.lastScan ? escK(p.lastScan) : '<span style="color:var(--muted)">never</span>'}</td>
+      <td><a href="${passUrl(p.code)}" target="_blank" style="font-size:.78rem;word-break:break-all">${escK(passUrl(p.code))}</a></td>
+      <td><button class="btn btn-danger btn-sm" onclick="revokePass(${p.id},'${escK(p.name).replace(/'/g, "\\'")}')">Revoke</button></td>
+    </tr>`).join('') : `<tr><td colspan="6" class="empty">No passes issued yet.</td></tr>`;
+}
+
+async function issuePass() {
+  const name = document.getElementById('pass-name').value.trim();
+  if (!name) return alert('Whose pass is this?');
+  const res = await api.post('/api/pass', {
+    poolId: activePoolId, name,
+    kind: document.getElementById('pass-kind').value,
+    memberNo: document.getElementById('pass-no').value.trim(),
+    party: document.getElementById('pass-party').value || 1,
+  });
+  if (!res.ok) return alert(res.error || 'Could not issue that pass.');
+  ['pass-name','pass-no'].forEach(id => document.getElementById(id).value = '');
+  const url = passUrl(res.pass.code);
+  document.getElementById('pass-new').innerHTML = `
+    <div style="background:#eff6ff;border:1px solid var(--blue-light);border-radius:10px;padding:14px;margin-top:6px">
+      <div style="font-weight:700;color:var(--blue-dark);margin-bottom:6px">✓ Pass issued for ${escK(res.pass.name)}</div>
+      <p style="font-size:.83rem;color:var(--muted);margin-bottom:8px">Send them this link. They can keep it open, screenshot it, or add it to Apple Wallet.</p>
+      <div class="qr-url">${escK(url)}</div>
+      <a class="btn btn-sm btn-primary" href="${url}" target="_blank" style="display:inline-block;margin-top:8px;text-decoration:none">Open the pass</a>
+    </div>`;
+  await refresh();
+  renderPasses();
+}
+
+async function revokePass(id, name) {
+  if (!confirm(`Revoke ${name}'s pass? Their QR stops working immediately.`)) return;
+  await api.post('/api/pass/delete', { id });
+  await refresh();
+  renderPasses();
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────

@@ -157,6 +157,7 @@ MANAGEMENT_API = (
     '/api/shifts/bulk', '/api/menu', '/api/menu/update', '/api/menu/delete',
     '/api/menu/bulk', '/api/layout', '/api/notification/send',
     '/api/order/void', '/api/order/delete', '/api/order/settle',
+    '/api/pass', '/api/pass/delete',
     '/api/kds-token', '/api/kds-token/revoke',
 )
 
@@ -211,11 +212,38 @@ def get_local_ip():
 def default_data():
     return {'employees': [], 'chemicals': [], 'shifts': [], 'punches': [], 'announcements': [], 'resources': [], 'pool_status': 'open', 'shift_requests': [], 'notifications': [], 'shift_confirmations': {}, 'pools': [], 'breaks': [],
             'menu': [], 'layouts': [], 'reservations': [], 'orders': [], 'waitlist': [],
-            'kds_devices': []}
+            'kds_devices': [], 'passes': []}
 
 # Entities that belong to a single pool and carry a poolId
 POOL_SCOPED = ('shifts', 'chemicals', 'punches', 'announcements', 'resources', 'shift_requests', 'notifications', 'breaks',
-               'menu', 'layouts', 'reservations', 'orders', 'waitlist', 'kds_devices')
+               'menu', 'layouts', 'reservations', 'orders', 'waitlist', 'kds_devices', 'passes')
+
+# ── Apple Wallet ────────────────────────────────────────────────────────────
+# A .pkpass is a zip whose manifest is signed with an Apple-issued Pass Type ID
+# certificate. There is no way around the signature: an unsigned pass is simply
+# refused by Wallet. So the files below have to come from the club's own Apple
+# Developer account, and nobody but the club should ever hold that key.
+#
+#   WALLET_DIR/pass-cert.pem   Pass Type ID certificate
+#   WALLET_DIR/pass-key.pem    its private key (keep 0600; never commit it)
+#   WALLET_DIR/wwdr.pem        Apple Worldwide Developer Relations CA
+#
+# Without them the QR still works everywhere — the pass page, a screenshot, a
+# printout. Only the "Add to Apple Wallet" button needs the signature.
+WALLET_DIR = os.environ.get('WALLET_DIR', os.path.join(DATA_DIR, 'wallet'))
+PASS_TYPE_ID = os.environ.get('PASS_TYPE_ID', '')      # e.g. pass.com.example.pool
+PASS_TEAM_ID = os.environ.get('PASS_TEAM_ID', '')
+PASS_KEY_PASSWORD = os.environ.get('PASS_KEY_PASSWORD', '')
+
+def _wallet_file(name):
+    return os.path.join(WALLET_DIR, name)
+
+def pkpass_ready():
+    return bool(PASS_TYPE_ID and PASS_TEAM_ID
+                and all(os.path.exists(_wallet_file(f))
+                        for f in ('pass-cert.pem', 'pass-key.pem', 'wwdr.pem')))
+
+PKPASS_READY = pkpass_ready()
 
 # Deck items guests can actually be seated at — everything else is decor
 BOOKABLE_TYPES = ('lounger', 'chair', 'cabana', 'table', 'daybed')
@@ -504,6 +532,98 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def send_pkpass(self, code):
+        """Build and sign an Apple Wallet pass for one guest code."""
+        d = load_data()
+        rec = next((x for x in d.get('passes', []) if x.get('code') == code), None)
+        if not rec or not rec.get('active', True):
+            self.send_json({'ok': False, 'error': 'This pass is not valid.'}, 404); return
+        if not PKPASS_READY:
+            # Say exactly what is missing rather than serving a file Wallet will
+            # reject with no explanation.
+            self.send_json({
+                'ok': False,
+                'error': 'Apple Wallet is not set up on this server yet.',
+                'needs': ['PASS_TYPE_ID', 'PASS_TEAM_ID',
+                          f'{WALLET_DIR}/pass-cert.pem', f'{WALLET_DIR}/pass-key.pem',
+                          f'{WALLET_DIR}/wwdr.pem'],
+            }, 501); return
+        import hashlib, subprocess, tempfile, zipfile
+        pool = next((x for x in d.get('pools', []) if x['id'] == rec.get('poolId')), None)
+        pass_json = {
+            'formatVersion': 1,
+            'passTypeIdentifier': PASS_TYPE_ID,
+            'teamIdentifier': PASS_TEAM_ID,
+            'organizationName': (pool or {}).get('name', 'Pool'),
+            'serialNumber': str(rec['id']),
+            'description': f"{(pool or {}).get('name', 'Pool')} membership pass",
+            'foregroundColor': 'rgb(255,255,255)',
+            'backgroundColor': 'rgb(2,62,138)',
+            'labelColor': 'rgb(190,220,245)',
+            'logoText': (pool or {}).get('name', 'Pool'),
+            # The barcode carries the same code the staff phone scans, so a
+            # Wallet pass and the web page are interchangeable at the gate.
+            'barcodes': [{'format': 'PKBarcodeFormatQR', 'message': rec['code'],
+                          'messageEncoding': 'iso-8859-1', 'altText': rec['name']}],
+            'generic': {
+                'primaryFields': [{'key': 'name', 'label': 'MEMBER', 'value': rec['name']}],
+                'secondaryFields': [
+                    {'key': 'party', 'label': 'PARTY', 'value': str(rec.get('party', 1))},
+                ] + ([{'key': 'member', 'label': 'MEMBER NO', 'value': rec['memberNo']}]
+                     if rec.get('memberNo') else []),
+                'backFields': [
+                    {'key': 'how', 'label': 'At the pool',
+                     'value': 'Show this pass to a staff member. They scan it to check you in and mark your chair.'},
+                ],
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            files = {'pass.json': json.dumps(pass_json).encode()}
+            # Wallet requires icon.png and logo.png; use whatever the club dropped in.
+            for art in ('icon.png', 'icon@2x.png', 'logo.png', 'logo@2x.png'):
+                src = _wallet_file(art)
+                if os.path.exists(src):
+                    with open(src, 'rb') as f:
+                        files[art] = f.read()
+            if 'icon.png' not in files:
+                self.send_json({'ok': False,
+                                'error': f'Wallet needs at least {WALLET_DIR}/icon.png (29x29 png).'}, 501); return
+            manifest = {n: hashlib.sha1(b).hexdigest() for n, b in files.items()}
+            files['manifest.json'] = json.dumps(manifest).encode()
+            man_path = os.path.join(tmp, 'manifest.json')
+            with open(man_path, 'wb') as f:
+                f.write(files['manifest.json'])
+            sig_path = os.path.join(tmp, 'signature')
+            cmd = ['openssl', 'smime', '-binary', '-sign',
+                   '-certfile', _wallet_file('wwdr.pem'),
+                   '-signer', _wallet_file('pass-cert.pem'),
+                   '-inkey', _wallet_file('pass-key.pem'),
+                   '-in', man_path, '-out', sig_path, '-outform', 'DER']
+            if PASS_KEY_PASSWORD:
+                cmd += ['-passin', 'env:PASS_KEY_PASSWORD']
+            try:
+                subprocess.run(cmd, check=True, capture_output=True,
+                               env={**os.environ, 'PASS_KEY_PASSWORD': PASS_KEY_PASSWORD})
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                detail = getattr(e, 'stderr', b'')
+                print('pkpass signing failed:', detail[:400])
+                self.send_json({'ok': False, 'error': 'Could not sign the pass — check the Wallet certificates.'}, 500)
+                return
+            with open(sig_path, 'rb') as f:
+                files['signature'] = f.read()
+            buf = os.path.join(tmp, 'pass.pkpass')
+            with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+                for n, b in files.items():
+                    z.writestr(n, b)
+            with open(buf, 'rb') as f:
+                body = f.read()
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/vnd.apple.pkpass')
+        self.send_header('Content-Disposition', f'attachment; filename="{rec["name"].replace(" ", "-")}.pkpass"')
+        self.send_header('Content-Length', len(body))
+        self.end_headers()
+        self.wfile.write(body)
+
     def send_json(self, data, status=200, session=None, end_session=False):
         body = json.dumps(data).encode()
         self.send_response(status)
@@ -619,6 +739,33 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
         elif p in ('/worker', '/worker.html', '/maralavitchstaff'):
             serve_file(self, 'worker.html')
+        elif p in ('/pass', '/pass.html'):
+            # The guest's own page. No session: the code in the URL is the whole
+            # credential, and it only ever renders a name and a QR.
+            serve_file(self, 'pass.html')
+        elif p.startswith('/pass/') and p.endswith('.pkpass'):
+            self.send_pkpass(p[6:-7])
+        elif p == '/api/pass/public':
+            # What pass.html reads to draw itself. Deliberately thin: a name and
+            # the pool, nothing about anyone else.
+            from urllib.parse import parse_qs
+            code = parse_qs(urlparse(self.path).query).get('c', [''])[0]
+            d = load_data()
+            rec = next((x for x in d.get('passes', []) if x.get('code') == code), None)
+            if not rec or not rec.get('active', True):
+                self.send_json({'ok': False, 'error': 'This pass is not valid.'}, 404); return
+            pool = next((x for x in d.get('pools', []) if x['id'] == rec.get('poolId')), None)
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            res = next((r for r in d.get('reservations', [])
+                        if r.get('passId') == rec['id'] and r.get('date') == today_str
+                        and r.get('status') in ('reserved', 'active')), None)
+            self.send_json({'ok': True, 'name': rec['name'], 'code': rec['code'],
+                            'kind': rec.get('kind', 'member'), 'memberNo': rec.get('memberNo', ''),
+                            'party': rec.get('party', 1),
+                            'poolName': (pool or {}).get('name', ''),
+                            'today': ({'seatLabel': res.get('seatLabel', ''), 'start': res.get('start', ''),
+                                       'status': res.get('status')} if res else None),
+                            'wallet': PKPASS_READY})
         elif p in ('/kds', '/kds.html', '/kitchen'):
             serve_file(self, 'kds.html')
         elif p in ('/print-qr', '/print-qr.html'):
@@ -1319,6 +1466,120 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({'ok': True, 'layout': layout})
 
         # ── Chair reservations ──────────────────────────────────────────────
+        # ── Guest passes (QR at the gate) ──────────────────────────────────
+        elif p == '/api/pass':
+            # One durable pass per household. The code is the whole credential,
+            # so it is long and random rather than a member number someone
+            # could guess their way into.
+            name = (body.get('name') or '').strip()
+            if not name:
+                self.send_json({'ok': False, 'error': 'Whose pass is this?'}, 400); return
+            existing = next((x for x in data.get('passes', []) if x['id'] == body.get('id')), None)
+            if existing:
+                existing['name'] = name
+                existing['kind'] = body.get('kind') or existing.get('kind', 'member')
+                existing['party'] = max(1, int(body.get('party') or existing.get('party') or 1))
+                existing['phone'] = (body.get('phone') or '').strip()
+                existing['active'] = bool(body.get('active', existing.get('active', True)))
+                save_data(data)
+                self.send_json({'ok': True, 'pass': existing}); return
+            rec = {
+                'id': ts(), 'poolId': body.get('poolId'),
+                'code': secrets.token_urlsafe(9),
+                'name': name,
+                'kind': body.get('kind') or 'member',      # member | guest
+                'memberNo': (body.get('memberNo') or '').strip(),
+                'party': max(1, int(body.get('party') or 1)),
+                'phone': (body.get('phone') or '').strip(),
+                'active': True,
+                'created': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                'lastScan': None,
+            }
+            data.setdefault('passes', []).append(rec)
+            save_data(data)
+            self.send_json({'ok': True, 'pass': rec})
+
+        elif p == '/api/pass/delete':
+            data['passes'] = [x for x in data.get('passes', []) if x['id'] != body.get('id')]
+            save_data(data)
+            self.send_json({'ok': True})
+
+        elif p == '/api/scan':
+            # What the staff phone asks the moment a QR is read. Answers the only
+            # two questions that matter at the gate: who is this, and do they
+            # have a chair yet? A code with no booking is not an error — it is a
+            # walk-in, and the answer says so instead of failing.
+            code = (body.get('code') or '').strip()
+            # Tolerate a full pass URL, since a scanner may hand back the whole thing
+            if '/pass' in code and 'c=' in code:
+                code = code.split('c=', 1)[1].split('&')[0]
+            pool_id = body.get('poolId')
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            rec = next((x for x in data.get('passes', []) if x.get('code') == code), None)
+            if not rec:
+                self.send_json({'ok': False, 'error': 'That code is not one of ours.', 'unknown': True}, 404); return
+            if not rec.get('active', True):
+                self.send_json({'ok': False, 'error': f"{rec['name']}'s pass has been switched off."}, 403); return
+            rec['lastScan'] = datetime.now().strftime('%Y-%m-%d %H:%M')
+            # Today's booking for this pass, if any
+            res = next((r for r in data.get('reservations', [])
+                        if r.get('passId') == rec['id'] and r.get('date') == today_str
+                        and r.get('status') in ('reserved', 'active')), None)
+            layout = next((l for l in data.get('layouts', []) if l.get('poolId') == pool_id), None)
+            taken = {r.get('seatId') for r in data.get('reservations', [])
+                     if r.get('date') == today_str and r.get('status') in ('reserved', 'active')
+                     and r.get('seatId') is not None}
+            free = [{'id': s['id'], 'label': s.get('label', ''), 'type': s.get('type', '')}
+                    for s in ((layout or {}).get('seats') or [])
+                    if s.get('type') in BOOKABLE_TYPES and s['id'] not in taken]
+            save_data(data)
+            self.send_json({
+                'ok': True, 'pass': rec, 'reservation': res,
+                'walkIn': res is None,
+                'freeSeats': free,
+            })
+
+        elif p == '/api/scan/seat':
+            # Mark the chair. Either attaches to the booking they already had or
+            # writes the walk-in down as one, so the deck map tells one story.
+            pass_id = body.get('passId')
+            rec = next((x for x in data.get('passes', []) if x['id'] == pass_id), None)
+            if not rec:
+                self.send_json({'ok': False, 'error': 'Unknown pass'}, 404); return
+            today_str = datetime.now().strftime('%Y-%m-%d')
+            seat_id = body.get('seatId')
+            now_hm = datetime.now().strftime('%H:%M')
+            clash = next((r for r in data.get('reservations', [])
+                          if r.get('seatId') == seat_id and r.get('date') == today_str
+                          and r.get('status') in ('reserved', 'active')
+                          and r.get('passId') != pass_id), None)
+            if clash:
+                self.send_json({'ok': False, 'error': f"That chair is already {clash.get('guestName') or 'taken'}."}, 409); return
+            res = next((r for r in data.get('reservations', [])
+                        if r.get('passId') == pass_id and r.get('date') == today_str
+                        and r.get('status') in ('reserved', 'active')), None)
+            if res:
+                res['seatId'] = seat_id
+                res['seatLabel'] = body.get('seatLabel', '')
+                res['status'] = 'active'
+                res['checkedInAt'] = res.get('checkedInAt') or now_hm
+            else:
+                res = {
+                    'id': ts(), 'poolId': body.get('poolId'), 'passId': pass_id,
+                    'seatId': seat_id, 'seatLabel': body.get('seatLabel', ''),
+                    'guestName': rec['name'], 'party': rec.get('party', 1),
+                    'phone': rec.get('phone', ''), 'note': 'Walk-in, scanned at the gate',
+                    'date': today_str, 'start': now_hm, 'end': '',
+                    'status': 'active',
+                    'empId': str(body.get('empId', '')), 'empName': body.get('empName', ''),
+                    'created': datetime.now().strftime('%Y-%m-%d %H:%M'),
+                    'checkedInAt': now_hm, 'checkedOutAt': None,
+                    'walkIn': True,
+                }
+                data.setdefault('reservations', []).insert(0, res)
+            save_data(data)
+            self.send_json({'ok': True, 'reservation': res})
+
         elif p == '/api/reservation':
             seat_id = body.get('seatId')
             date_str = body.get('date') or datetime.now().strftime('%Y-%m-%d')

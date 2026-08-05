@@ -533,6 +533,30 @@ select.form-inp{cursor:pointer;}
 .req-form-card{background:var(--card);border-radius:var(--r-sm);padding:14px;margin-bottom:10px;box-shadow:var(--shadow);}
 .req-form-lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
 
+
+/* ── Pass scanning ─────────────────────────────────────────────────────── */
+.scan-frame{position:relative;width:100%;aspect-ratio:1;background:#000;border-radius:var(--r);
+  overflow:hidden;box-shadow:var(--shadow-md);}
+.scan-frame video{width:100%;height:100%;object-fit:cover;display:block;}
+.scan-box{position:absolute;inset:16%;border:3px solid rgba(255,255,255,.85);border-radius:16px;
+  box-shadow:0 0 0 100vmax rgba(0,0,0,.32);}
+.scan-hint{text-align:center;font-size:.84rem;color:var(--muted);margin-top:10px;line-height:1.45;}
+.guest-card{background:var(--card);border-radius:var(--r);padding:18px;box-shadow:var(--shadow-md);
+  border-left:5px solid var(--blue);margin-bottom:12px;}
+.guest-card.walkin{border-left-color:var(--yellow);}
+.guest-name{font-size:1.3rem;font-weight:800;letter-spacing:-.02em;}
+.guest-sub{font-size:.82rem;color:var(--muted);margin-top:3px;}
+.guest-flag{display:inline-block;border-radius:99px;padding:3px 11px;font-size:.7rem;font-weight:800;
+  text-transform:uppercase;letter-spacing:.06em;margin-top:9px;}
+.guest-flag.booked{background:var(--green-lt);color:var(--green);}
+.guest-flag.walk{background:var(--yellow-lt);color:var(--yellow);}
+.seat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:4px;}
+.seat-pick{padding:13px 6px;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--card);
+  color:var(--text);font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit;}
+.seat-pick:active{border-color:var(--blue);background:var(--blue-lt);}
+.scan-again{width:100%;padding:14px;margin-top:10px;border:1.5px solid var(--border);border-radius:var(--r-sm);
+  background:var(--card2);color:var(--text);font-size:.9rem;font-weight:800;cursor:pointer;font-family:inherit;}
+
 /* ── Utilities ─────────────────────────────────────────────────────────── */
 /* ── Kitchen status (waiter's view of the pass) ────────────────────────── */
 .kt-card{
@@ -929,7 +953,8 @@ select.form-inp{cursor:pointer;}
   </div>
   <p class="lbl">Waitlist <span id="wait-count" style="color:var(--muted);font-weight:600"></span></p>
   <div id="wait-list"></div>
-  <button class="btn-next" style="width:100%;margin-top:4px" onclick="openWaitlistForm()">➕ Add party to waitlist</button>
+  <button class="btn-next" style="width:100%;margin-top:4px" onclick="startScan()">📷 Scan a guest pass</button>
+  <button class="btn-next" style="width:100%;margin-top:8px;background:var(--card2);color:var(--text);border:1.5px solid var(--border)" onclick="openWaitlistForm()">➕ Add party to waitlist</button>
   <button class="mgr-link" id="deck-edit-link" onclick="openLayoutEditor()" style="display:none">✏️ Edit deck layout</button>
 </div>
 
@@ -1010,6 +1035,23 @@ select.form-inp{cursor:pointer;}
     <span class="cb-left"><span id="cart-count">0 items</span></span>
     <span id="cart-total">$0.00</span>
   </button>
+</div>
+
+<!-- ── SCAN A PASS ────────────────────────────────────────────────────── -->
+<div class="screen" id="screen-scan">
+  <div id="scan-stage">
+    <div class="scan-frame"><video id="scan-video" playsinline muted></video><div class="scan-box"></div></div>
+    <p class="scan-hint" id="scan-hint">Point the camera at the guest's QR code.</p>
+    <div class="req-form-card" style="margin-top:12px">
+      <div class="req-form-lbl">…or type the code from their pass</div>
+      <input class="form-inp" id="scan-manual" placeholder="e.g. K3f9-Xa2p"
+        autocapitalize="off" autocorrect="off" spellcheck="false"
+        onkeydown="if(event.key==='Enter')lookupCode(this.value)"/>
+      <button class="btn-next" style="width:100%;margin-top:8px" onclick="lookupCode(document.getElementById('scan-manual').value)">Look up →</button>
+    </div>
+  </div>
+  <div id="scan-result"></div>
+  <button class="logout-link" onclick="stopScan();showTab('deck')">← Back to deck</button>
 </div>
 
 <!-- ── CLOCK IN WIZARD ────────────────────────────────────────────────── -->
@@ -1286,7 +1328,7 @@ const SCREEN_TITLES = {
   clockin:'Clock In', clockout:'Clock Out', request:'Request Time', result:'All Set',
   name:'Sign In', password:'Sign In', pool:'Choose Pool',
   deck:'Deck & Chairs', order:'Point of Sale', cart:'Checkout', receipt:'Payment Complete',
-  menued:'Edit Menu', layout:'Edit Deck Layout',
+  menued:'Edit Menu', layout:'Edit Deck Layout', scan:'Scan a Pass',
 };
 function setHeader(id) {
   const el = document.getElementById('hdr-title');
@@ -1294,6 +1336,9 @@ function setHeader(id) {
 }
 
 function show(id) {
+  // The camera keeps running otherwise — a green light on a phone in someone's
+  // pocket, and a battery drain nobody connects back to this app.
+  if (id !== 'scan' && typeof stopScan === 'function') stopScan();
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-'+id).classList.add('active');
   window.scrollTo(0, 0);
@@ -1584,6 +1629,107 @@ async function loadHome() {
   document.getElementById('tab-bar').classList.add('visible');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-home').classList.add('active');
+}
+
+
+// ══ Scanning a guest pass ═══════════════════════════════════════════════════
+// One scan answers both questions at the gate: who is this, and have they got a
+// chair? A code with no booking isn't an error — it's a walk-in, and the screen
+// says so and offers the free chairs instead of a dead end.
+let scanStream = null, scanLoop = null, scanBusy = false;
+
+async function startScan() {
+  show('scan');
+  document.getElementById('scan-result').innerHTML = '';
+  document.getElementById('scan-stage').style.display = '';
+  document.getElementById('scan-manual').value = '';
+  const hint = document.getElementById('scan-hint');
+
+  // BarcodeDetector is missing on iOS Safari, so the typed code is a first-class
+  // path here, not a token fallback — the pass shows the code under the QR.
+  if (!('BarcodeDetector' in window)) {
+    hint.textContent = "This phone can't scan in the browser — type the code printed under the guest's QR instead.";
+    document.querySelector('#screen-scan .scan-frame').style.display = 'none';
+    document.getElementById('scan-manual').focus();
+    return;
+  }
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const v = document.getElementById('scan-video');
+    v.srcObject = scanStream; await v.play();
+    const det = new BarcodeDetector({ formats: ['qr_code'] });
+    scanLoop = setInterval(async () => {
+      if (scanBusy || v.readyState < 2) return;
+      try {
+        const found = await det.detect(v);
+        if (found.length) { scanBusy = true; lookupCode(found[0].rawValue); }
+      } catch (e) { /* a dropped frame is not a failure */ }
+    }, 350);
+  } catch (e) {
+    hint.textContent = 'No camera access — type the code from the guest\'s pass instead.';
+    document.querySelector('#screen-scan .scan-frame').style.display = 'none';
+  }
+}
+
+function stopScan() {
+  if (scanLoop) { clearInterval(scanLoop); scanLoop = null; }
+  if (scanStream) { scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+  scanBusy = false;
+}
+
+async function lookupCode(raw) {
+  const code = (raw || '').trim();
+  if (!code) return;
+  stopScan();
+  const res = await post('/api/scan', { code, poolId: Number(activePoolId) });
+  document.getElementById('scan-stage').style.display = 'none';
+  const el = document.getElementById('scan-result');
+  if (!res.ok) {
+    el.innerHTML = `<div class="guest-card" style="border-left-color:var(--red)">
+        <div class="guest-name">Not recognised</div>
+        <div class="guest-sub">${PD.esc(res.error || 'That code is not one of ours.')}</div>
+      </div>
+      <button class="scan-again" onclick="startScan()">Scan another</button>`;
+    return;
+  }
+  renderScanned(res);
+}
+
+function renderScanned(res) {
+  const p = res.pass, r = res.reservation, walk = res.walkIn;
+  const seats = res.freeSeats || [];
+  const el = document.getElementById('scan-result');
+  const seated = r && r.seatId != null;
+  el.innerHTML = `
+    <div class="guest-card ${walk ? 'walkin' : ''}">
+      <div class="guest-name">${PD.esc(p.name)}</div>
+      <div class="guest-sub">${p.kind === 'guest' ? 'Guest pass' : 'Member'}${
+        p.memberNo ? ' · No. ' + PD.esc(p.memberNo) : ''}${
+        p.party > 1 ? ' · party of ' + p.party : ''}</div>
+      <span class="guest-flag ${walk ? 'walk' : 'booked'}">${
+        walk ? 'No reservation — walk-in' : (seated ? 'Booked · ' + PD.esc(r.seatLabel || 'chair set') : 'Booked · no chair yet')}</span>
+      ${r && r.note ? `<div class="guest-sub" style="margin-top:8px">📝 ${PD.esc(r.note)}</div>` : ''}
+    </div>
+    <p class="lbl">${seated ? 'Move to another chair' : 'Mark their chair'}</p>
+    ${seats.length
+      ? `<div class="seat-grid">${seats.slice(0, 30).map(s =>
+          `<button class="seat-pick" onclick="markSeat(${p.id},${s.id},'${String(s.label || '').replace(/'/g, "\\'")}')">${PD.esc(s.label || s.type)}</button>`).join('')}</div>`
+      : `<p class="empty">Every chair is taken. Add them to the waitlist from the deck.</p>`}
+    <button class="scan-again" onclick="startScan()">Scan the next guest</button>`;
+}
+
+async function markSeat(passId, seatId, seatLabel) {
+  const res = await post('/api/scan/seat', {
+    passId, seatId, seatLabel, poolId: Number(activePoolId), empId, empName,
+  });
+  if (!res.ok) return alert(res.error || 'Could not mark that chair.');
+  document.getElementById('scan-result').innerHTML = `
+    <div class="guest-card" style="border-left-color:var(--green)">
+      <div class="guest-name">✓ ${PD.esc(res.reservation.guestName)}</div>
+      <div class="guest-sub">Checked in at ${PD.esc(res.reservation.checkedInAt || '')} · ${PD.esc(seatLabel || 'chair marked')}</div>
+    </div>
+    <button class="scan-again" onclick="startScan()">Scan the next guest</button>
+    <button class="scan-again" onclick="stopScan();showTab('deck')">Back to the deck map</button>`;
 }
 
 // ══ Kitchen status ══════════════════════════════════════════════════════════

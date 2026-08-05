@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#023e8a"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>Pool Pass</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+  background:#0d1117;color:#e6edf6;min-height:100vh;
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  -webkit-font-smoothing:antialiased;letter-spacing:-.011em;
+}
+.card{
+  background:linear-gradient(160deg,#0a4fa0,#023e8a 55%,#012b60);
+  width:min(400px,94vw);border-radius:22px;padding:26px 22px 24px;
+  box-shadow:0 18px 50px rgba(0,0,0,.55);text-align:center;
+}
+.pool{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.16em;opacity:.75;}
+.name{font-size:1.75rem;font-weight:800;margin:8px 0 2px;letter-spacing:-.02em;line-height:1.1;}
+.kind{font-size:.8rem;opacity:.72;margin-bottom:20px;}
+/* The QR sits on white no matter the theme — scanners need the contrast. */
+.qr{background:#fff;padding:15px;border-radius:16px;display:inline-block;line-height:0;}
+.hint{font-size:.8rem;opacity:.72;margin-top:16px;line-height:1.5;}
+.today{
+  background:rgba(255,255,255,.13);border-radius:13px;padding:12px 14px;margin-top:16px;
+  font-size:.86rem;font-weight:700;
+}
+.today .lbl{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.12em;opacity:.7;display:block;margin-bottom:3px;}
+.wallet{
+  display:block;width:100%;margin-top:18px;padding:14px;border-radius:12px;
+  background:#000;color:#fff;font-size:.92rem;font-weight:700;text-decoration:none;
+  border:1px solid rgba(255,255,255,.28);
+}
+.code{font-size:.7rem;opacity:.45;margin-top:14px;font-family:ui-monospace,Menlo,monospace;letter-spacing:.06em;}
+.err{background:#1c2333;border-radius:16px;padding:30px 22px;text-align:center;width:min(400px,94vw);}
+.err h1{font-size:1.1rem;margin-bottom:8px;}
+.err p{font-size:.88rem;color:#8b949e;line-height:1.55;}
+</style>
+</head>
+<body>
+<div id="root"><div class="err"><h1>Loading…</h1></div></div>
+
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const code = new URLSearchParams(location.search).get('c') || '';
+
+async function draw() {
+  const root = document.getElementById('root');
+  if (!code) {
+    root.innerHTML = `<div class="err"><h1>No pass code</h1><p>Open the link the pool sent you.</p></div>`;
+    return;
+  }
+  let d;
+  try {
+    d = await (await fetch('/api/pass/public?c=' + encodeURIComponent(code))).json();
+  } catch (e) {
+    root.innerHTML = `<div class="err"><h1>Can't reach the pool</h1><p>Check your connection and try again. Staff can still look you up by name.</p></div>`;
+    return;
+  }
+  if (!d.ok) {
+    root.innerHTML = `<div class="err"><h1>Pass not valid</h1><p>${esc(d.error || 'Ask the front desk for a new one.')}</p></div>`;
+    return;
+  }
+  root.innerHTML = `
+    <div class="card">
+      <div class="pool">${esc(d.poolName || 'Pool')}</div>
+      <div class="name">${esc(d.name)}</div>
+      <div class="kind">${d.kind === 'guest' ? 'Guest pass' : 'Member'}${
+        d.memberNo ? ' · No. ' + esc(d.memberNo) : ''}${
+        d.party > 1 ? ' · party of ' + d.party : ''}</div>
+      <div class="qr" id="qr"></div>
+      ${d.today ? `<div class="today"><span class="lbl">Today</span>${
+        d.today.seatLabel ? esc(d.today.seatLabel) : 'Booked'}${
+        d.today.start ? ' · from ' + esc(d.today.start) : ''}${
+        d.today.status === 'active' ? ' · checked in' : ''}</div>` : ''}
+      <div class="hint">Show this to a staff member at the pool. They scan it to check you in and mark your chair.</div>
+      ${d.wallet ? `<a class="wallet" href="/pass/${encodeURIComponent(code)}.pkpass"> Add to Apple Wallet</a>` : ''}
+      <div class="code">${esc(d.code)}</div>
+    </div>`;
+  // Encode the bare code, not a URL: a staff scanner reads it directly, and a
+  // stray scan by a random QR app reveals nothing useful.
+  new QRCode(document.getElementById('qr'), {
+    text: d.code, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M,
+  });
+}
+draw();
+</script>
+</body>
+</html>
