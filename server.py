@@ -146,7 +146,11 @@ PUBLIC_API = ('/api/roster', '/api/auth', '/api/logout', '/api/guest/signin',
               # These four are the entire surface they can reach, and each one
               # hands back only what a person holding a chair's QR code should
               # see — never /api/data, which is the whole club at once.
-              '/api/guest/menu', '/api/guest/order', '/api/guest/ticket')
+              '/api/guest/menu', '/api/guest/order', '/api/guest/ticket',
+              # A guest's own pass. The code in the URL is the credential, and
+              # the answer is one household's name and today's chair — nothing
+              # about anyone else.
+              '/api/pass/public')
 
 # Routes that change who can get in, or expose the whole club at once.
 MANAGEMENT_API = (
@@ -750,7 +754,6 @@ class Handler(BaseHTTPRequestHandler):
         elif p == '/api/pass/public':
             # What pass.html reads to draw itself. Deliberately thin: a name and
             # the pool, nothing about anyone else.
-            from urllib.parse import parse_qs
             code = parse_qs(urlparse(self.path).query).get('c', [''])[0]
             d = load_data()
             rec = next((x for x in d.get('passes', []) if x.get('code') == code), None)
@@ -763,9 +766,14 @@ class Handler(BaseHTTPRequestHandler):
                         and r.get('status') in ('reserved', 'active')), None)
             self.send_json({'ok': True, 'name': rec['name'], 'code': rec['code'],
                             'kind': rec.get('kind', 'member'), 'memberNo': rec.get('memberNo', ''),
-                            'party': rec.get('party', 1),
+                            'party': rec.get('party', 1), 'phone': rec.get('phone', ''),
+                            'poolId': rec.get('poolId'),
                             'poolName': (pool or {}).get('name', ''),
-                            'today': ({'seatLabel': res.get('seatLabel', ''), 'start': res.get('start', ''),
+                            # seatId travels too, so the ordering page can skip
+                            # asking a guest where they are sitting when a staff
+                            # member has already scanned them into a chair.
+                            'today': ({'seatId': res.get('seatId'), 'seatLabel': res.get('seatLabel', ''),
+                                       'start': res.get('start', ''),
                                        'status': res.get('status')} if res else None),
                             'wallet': PKPASS_READY})
         elif p in ('/kds', '/kds.html', '/kitchen'):

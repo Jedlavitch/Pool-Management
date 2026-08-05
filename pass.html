@@ -31,6 +31,15 @@ body{
   font-size:.86rem;font-weight:700;
 }
 .today .lbl{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.12em;opacity:.7;display:block;margin-bottom:3px;}
+.order{
+  display:block;width:100%;margin-top:16px;padding:15px;border-radius:12px;
+  background:rgba(255,255,255,.16);color:#fff;font-size:.95rem;font-weight:800;
+  text-decoration:none;border:1px solid rgba(255,255,255,.3);
+}
+.order:active{background:rgba(255,255,255,.26);}
+.switch{display:block;width:100%;margin-top:10px;padding:11px;background:none;border:none;
+  color:rgba(255,255,255,.6);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;
+  text-decoration:none;}
 .wallet{
   display:block;width:100%;margin-top:18px;padding:14px;border-radius:12px;
   background:#000;color:#fff;font-size:.92rem;font-weight:700;text-decoration:none;
@@ -75,16 +84,21 @@ async function draw() {
         d.memberNo ? ' · No. ' + esc(d.memberNo) : ''}${
         d.party > 1 ? ' · party of ' + d.party : ''}</div>
       <div class="qr" id="qr"></div>
-      ${d.today ? `<div class="today"><span class="lbl">Today</span>${
-        d.today.seatLabel ? esc(d.today.seatLabel) : 'Booked'}${
-        d.today.start ? ' · from ' + esc(d.today.start) : ''}${
-        d.today.status === 'active' ? ' · checked in' : ''}</div>` : ''}
+      ${d.today ? `<div class="today"><span class="lbl">${
+        d.today.status === 'active' ? 'You are here' : 'Booked today'}</span>${
+        d.today.seatLabel ? 'Chair ' + esc(d.today.seatLabel) : 'No chair marked yet'}${
+        d.today.start ? ' · from ' + esc(d.today.start) : ''}</div>` : ''}
       <div class="hint">Show this to a staff member at the pool. They scan it to check you in and mark your chair.</div>
+      ${d.poolId ? `<a class="order" href="/order?pool=${encodeURIComponent(d.poolId)}&c=${encodeURIComponent(code)}">🍔 Order food &amp; drinks${
+        d.today && d.today.seatLabel ? ' to chair ' + esc(d.today.seatLabel) : ''}</a>` : ''}
       ${d.wallet ? `<a class="wallet" href="/pass/${encodeURIComponent(code)}.pkpass"> Add to Apple Wallet</a>` : ''}
       <div class="code">${esc(d.code)}</div>
+      <a class="switch" href="/mypass?switch=1">Not ${esc(d.name.split(' ').slice(-1)[0])}? Sign in again</a>
     </div>`;
   // Encode the bare code, not a URL: a staff scanner reads it directly, and a
   // stray scan by a random QR app reveals nothing useful.
+  // Remember, so the front door skips the form next visit.
+  try { localStorage.setItem('pool_pass_code', d.code); } catch (e) {}
   new QRCode(document.getElementById('qr'), {
     text: d.code, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M,
   });

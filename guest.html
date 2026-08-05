@@ -231,7 +231,9 @@ header{
    menu and one's own ticket, and nothing else about the club.
    ══════════════════════════════════════════════════════════════════════════ */
 const qs = new URLSearchParams(location.search);
-const POOL = Number(qs.get('pool'));
+let POOL = Number(qs.get('pool'));
+const PASS = qs.get('c') || '';   // signed-in guest arriving from their pass
+let PASSHOLDER = null;
 let DATA = null, cart = [], cat = 'All', seat = null, pay = 'deliver';
 let ticket = null, poll = null;
 
@@ -249,6 +251,18 @@ function showScreen(n) {
 }
 
 async function boot() {
+  // Arriving from a pass: the pool, the name, and often the chair are already
+  // known, so none of it should be asked for again. A staff member scanning
+  // someone into chair A1 has effectively already answered "where are you?".
+  if (PASS) {
+    try {
+      const p = await (await fetch('/api/pass/public?c=' + encodeURIComponent(PASS))).json();
+      if (p.ok) {
+        PASSHOLDER = p;
+        if (!POOL) POOL = Number(p.poolId);
+      }
+    } catch (e) { /* fall through to the normal flow */ }
+  }
   if (!POOL) return fail('This link is missing its pool code. Ask a staff member for the right QR code.');
   let r;
   try {
@@ -264,9 +278,20 @@ async function boot() {
   $('h-sub').textContent = r.pool.status === 'limited'
     ? '⚠️ Limited service today' : 'Order to your chair';
 
-  // A per-chair QR carries its seat; a generic one drops you on the picker.
+  if (PASSHOLDER) {
+    $('h-sub').textContent = PASSHOLDER.name;
+    const nameField = $('g-name');
+    if (nameField && !nameField.value) nameField.value = PASSHOLDER.name;
+    const ph = $('g-contact');
+    if (ph && !ph.value && PASSHOLDER.phone) ph.value = PASSHOLDER.phone;
+  }
+
+  // Three ways to land on a chair, in order of confidence: the seat a staff
+  // member scanned this guest into, a per-chair QR on the lounger, then asking.
+  const seated = PASSHOLDER && PASSHOLDER.today && PASSHOLDER.today.seatId != null
+    ? r.seats.find(s => String(s.id) === String(PASSHOLDER.today.seatId)) : null;
   const wanted = qs.get('seat');
-  const found = r.seats.find(s => String(s.id) === String(wanted)
+  const found = seated || r.seats.find(s => String(s.id) === String(wanted)
                               || s.label.toUpperCase() === String(wanted || '').toUpperCase());
   if (found) { setSeat(found); }
   else { renderSeatGrid(); showScreen('chair'); }
@@ -411,7 +436,7 @@ async function placeOrder() {
     r = await (await fetch('/api/guest/order', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        poolId: POOL, seatId: seat.id,
+        poolId: POOL, seatId: seat.id, passCode: PASS || undefined,
         items: cart.map(li => ({menuId: li.menuId, qty: li.qty, note: li.note})),
         payment: pay, account: $('g-account')?.value || '',
         guestName: $('g-name').value, contact: $('g-contact').value, note: $('g-note').value,
