@@ -213,6 +213,25 @@ def get_local_ip():
         pass
     return '127.0.0.1'
 
+def storage_warning():
+    """Non-empty when this deploy will lose its data on the next restart.
+
+    On a PaaS the code directory is rebuilt every deploy, so a data.json sitting
+    next to server.py is temporary storage wearing a convincing disguise: writes
+    succeed, the app looks healthy, and the club silently starts from scratch on
+    the next push. Only a mounted volume survives, and DATA_DIR is how it gets
+    pointed there.
+    """
+    if not IS_PUBLIC:
+        return ''      # a laptop or the pool's own machine keeps its disk
+    if os.path.abspath(DATA_DIR) == os.path.abspath(_HERE):
+        return ('DATA_DIR is not set, so the database lives beside the code and '
+                'is erased on every deploy. Attach a volume and set DATA_DIR to '
+                'its mount path.')
+    return ''
+
+STORAGE_WARNING = storage_warning()
+
 def default_data():
     return {'employees': [], 'chemicals': [], 'shifts': [], 'punches': [], 'announcements': [], 'resources': [], 'pool_status': 'open', 'shift_requests': [], 'notifications': [], 'shift_confirmations': {}, 'pools': [], 'breaks': [],
             'menu': [], 'layouts': [], 'reservations': [], 'orders': [], 'waitlist': [],
@@ -682,6 +701,7 @@ class Handler(BaseHTTPRequestHandler):
                 # Nobody enrolled and no admin password configured: the club
                 # still has to be created, so the dashboard opens unlocked.
                 'setup_mode': not d.get('employees') and not ADMIN_PASSWORD,
+                'storage_warning': STORAGE_WARNING,
             })
             return
 
@@ -2021,6 +2041,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({'error': 'not found'}, 404)
 
 if __name__ == '__main__':
+    if STORAGE_WARNING:
+        print('=' * 72)
+        print('!!  DATA WILL NOT SURVIVE THE NEXT DEPLOY')
+        print('!!  ' + STORAGE_WARNING)
+        print('!!  Railway: add a Volume mounted at /data, then set DATA_DIR=/data')
+        print('=' * 72, flush=True)
     ip = get_local_ip()
     print(f"Pool Manager → http://localhost:{PORT}", flush=True)
     print(f'Guard QR URL → http://{ip}:{PORT}/quicklog')

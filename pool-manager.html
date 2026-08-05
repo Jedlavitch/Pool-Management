@@ -2344,6 +2344,21 @@ async function voidKitchenOrder(id, num) {
   renderKitchen();
 }
 
+// ── Storage warning ────────────────────────────────────────────────────────
+function showStorageWarning(msg) {
+  if (document.getElementById('storage-warn')) return;
+  const bar = document.createElement('div');
+  bar.id = 'storage-warn';
+  bar.style.cssText = 'position:sticky;top:0;z-index:300;background:#7f1d1d;color:#fff;'
+    + 'padding:12px 16px;font-size:.86rem;line-height:1.5;font-weight:600;'
+    + 'box-shadow:0 2px 8px rgba(0,0,0,.3)';
+  bar.innerHTML = '<b>⚠️ Nothing here is being saved permanently.</b> '
+    + escK(msg)
+    + ' <span style="opacity:.85">Railway → Volumes → mount at <code>/data</code>, '
+    + 'then Variables → <code>DATA_DIR=/data</code>, and redeploy.</span>';
+  document.body.prepend(bar);
+}
+
 // ── Guest passes ───────────────────────────────────────────────────────────
 const passUrl = code => `${location.origin}/pass?c=${encodeURIComponent(code)}`;
 
@@ -2412,6 +2427,9 @@ async function openGate() {
   let needsPassword = false, adminAvailable = false;
   try {
     const d = await (await fetch('/api/roster')).json();
+    // A deploy that erases itself on every push is the worst kind of bug: every
+    // save looks like it worked. Say so where a manager will actually see it.
+    if (d.storage_warning) showStorageWarning(d.storage_warning);
     staff = (d.employees || []).filter(e => GATE_ROLES.includes(e.role));
     needsPassword = !!d.requires_password;
     adminAvailable = !!d.admin_available;
